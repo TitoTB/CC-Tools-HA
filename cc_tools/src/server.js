@@ -923,7 +923,7 @@ app.post('/api/tasks/creality/login/open', requireAuth, async (req, res) => {
     res.json({
       ok: true,
       result,
-      url: '/novnc/vnc.html?autoconnect=1&resize=remote&path=novnc%2Fwebsockify'
+      url: '/novnc/vnc.html?autoconnect=1&reconnect=1&reconnect_delay=1000&resize=remote&path=novnc%2Fwebsockify'
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });

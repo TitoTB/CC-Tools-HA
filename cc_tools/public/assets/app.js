@@ -2223,6 +2223,7 @@ async function openCrealityViewer() {
   const result = await api('/api/tasks/creality/login/open', { method: 'POST' });
   if (result.ok) {
     viewer.location.href = result.url;
+    retryViewerConnectionOnce(viewer, result.url);
     toast('Creality Cloud abierto en el visor remoto.');
   } else {
     viewer.close();
@@ -2238,6 +2239,21 @@ function showView(view) {
   for (const button of ['home', 'designs', 'settings', 'logs']) {
     $(`#nav-${button}`)?.classList.toggle('is-active', button === view);
   }
+}
+
+function retryViewerConnectionOnce(viewer, url) {
+  window.setTimeout(() => {
+    if (viewer.closed) return;
+    try {
+      const status = viewer.document.querySelector('#noVNC_status')?.textContent?.trim() || '';
+      if (!/conectando|connecting/i.test(status)) return;
+      const retryUrl = new URL(url, window.location.href);
+      retryUrl.searchParams.set('retry', String(Date.now()));
+      viewer.location.replace(retryUrl.href);
+    } catch {
+      // The viewer may be navigating when the check runs; noVNC handles later reconnects.
+    }
+  }, 6000);
 }
 
 function showSettingsTab(tab) {

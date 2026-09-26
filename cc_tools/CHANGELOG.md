@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4
+
+- Permite iniciar el complemento sin repetir `initial_password` cuando ya existen credenciales guardadas.
+- Muestra en rojo el aviso que solicita configurar la contraseña inicial.
+- Reconecta automáticamente el visor noVNC si el primer intento queda esperando conexión.
+
 ## 1.0.3
 
 - Posponemos la indexación inicial de perfiles favoritos hasta completar el asistente.
