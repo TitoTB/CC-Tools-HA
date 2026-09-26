@@ -1161,17 +1161,20 @@ async function refresh() {
   refreshCrealityProfile(result.browser).catch(() => {});
 }
 
-async function refreshCrealityProfile(browser = { mode: 'idle' }) {
-  if (!state.config?.setup?.assistantCompleted) return;
+async function refreshCrealityProfile(browser = { mode: 'idle' }, { force = false } = {}) {
+  if (!force && !state.config?.setup?.assistantCompleted) return;
 
   const profile = state.config?.crealityProfile || {};
   const updatedAt = Date.parse(profile.updatedAt || '');
   const stale = !Number.isFinite(updatedAt) || Date.now() - updatedAt >= 24 * 60 * 60 * 1000;
-  if (profileRefreshAttempted || !stale || browser?.mode !== 'idle') return;
+  if (profileRefreshAttempted || (!force && !stale) || browser?.mode !== 'idle') return;
 
   profileRefreshAttempted = true;
   const result = await api('/api/creality/profile/refresh', { method: 'POST' });
-  if (!result.ok || !result.profile) return;
+  if (!result.ok || !result.profile) {
+    profileRefreshAttempted = false;
+    return;
+  }
   state.config.crealityProfile = result.profile;
   renderCrealityProfile(result.profile);
 }
@@ -3122,6 +3125,10 @@ async function advanceWizard() {
       toast(result.error);
       return;
     }
+    profileRefreshAttempted = false;
+    refreshCrealityProfile({ mode: 'idle' }, { force: true }).catch(() => {
+      profileRefreshAttempted = false;
+    });
   }
 
   if (step === 2) {
@@ -3206,6 +3213,11 @@ async function completeWizard() {
   });
   if (result.ok) {
     state.config = result.config;
+    if (!state.config.crealityProfile?.userId && !profileRefreshAttempted) {
+      refreshCrealityProfile({ mode: 'idle' }, { force: true }).catch(() => {
+        profileRefreshAttempted = false;
+      });
+    }
   }
   fields.wizardModal.hidden = true;
 }

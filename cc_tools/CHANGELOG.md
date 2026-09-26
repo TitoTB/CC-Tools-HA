@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.5
+
+- Recupera automáticamente el perfil y el avatar de Creality Cloud después del inicio de sesión del asistente.
+- Permite reintentar la consulta del perfil cuando el primer intento no obtiene datos.
+
 ## 1.0.4
 
 - Permite iniciar el complemento sin repetir `initial_password` cuando ya existen credenciales guardadas.
