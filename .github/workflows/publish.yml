@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - cc_tools/config.yaml
+      - .github/workflows/publish.yml
 
 env:
   ARCHITECTURES: '["amd64", "aarch64"]'
@@ -20,6 +21,7 @@ jobs:
     name: Initialize publication
     runs-on: ubuntu-latest
     outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
       version: ${{ steps.app.outputs.version }}
     steps:
       - name: Checkout repository
@@ -36,20 +38,25 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
+      - name: Prepare build matrix
+        id: matrix
+        uses: home-assistant/builder/actions/prepare-multi-arch-matrix@2026.09.0
+        with:
+          architectures: ${{ env.ARCHITECTURES }}
+          image-name: ${{ env.IMAGE_NAME }}
+          registry-prefix: ghcr.io/titotb
+
   build:
     name: Build ${{ matrix.arch }} image
     needs: init
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
       id-token: write
       packages: write
     strategy:
       fail-fast: false
-      matrix:
-        arch:
-          - amd64
-          - aarch64
+      matrix: ${{ fromJSON(needs.init.outputs.matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -60,7 +67,7 @@ jobs:
           arch: ${{ matrix.arch }}
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
           context: cc_tools
-          image: ghcr.io/titotb/${{ matrix.arch }}-${{ env.IMAGE_NAME }}
+          image: ${{ matrix.image }}
           image-tags: |
             ${{ needs.init.outputs.version }}
             latest
@@ -92,4 +99,3 @@ jobs:
             ${{ needs.init.outputs.version }}
             latest
           registry-prefix: ghcr.io/titotb
-          skip-existing: ${{ needs.init.outputs.version }}
