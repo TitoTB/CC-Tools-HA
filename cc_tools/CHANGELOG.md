@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Evita que la carga automática del perfil ocupe el navegador durante el asistente inicial.
+- Cierra el navegador interactivo al avanzar tras iniciar sesión para guardar la sesión y liberar las automatizaciones.
+
 ## 1.0.1
 
 - Sustituye el error técnico de opción obligatoria por una indicación clara para configurar la contraseña antes de iniciar CC Tools.

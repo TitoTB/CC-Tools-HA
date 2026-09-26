@@ -1162,6 +1162,8 @@ async function refresh() {
 }
 
 async function refreshCrealityProfile(browser = { mode: 'idle' }) {
+  if (!state.config?.setup?.assistantCompleted) return;
+
   const profile = state.config?.crealityProfile || {};
   const updatedAt = Date.parse(profile.updatedAt || '');
   const stale = !Number.isFinite(updatedAt) || Date.now() - updatedAt >= 24 * 60 * 60 * 1000;
@@ -3097,6 +3099,14 @@ function renderDesignFavoriteAuthorFilter(profiles = []) {
 async function advanceWizard() {
   const active = $('.wizard-step.is-visible');
   const step = Number(active.dataset.wizardStep);
+
+  if (step === 1) {
+    const result = await api('/api/tasks/creality/login/close', { method: 'POST' });
+    if (!result.ok) {
+      toast(result.error);
+      return;
+    }
+  }
 
   if (step === 2) {
     const saved = await saveWizardTelegram();
