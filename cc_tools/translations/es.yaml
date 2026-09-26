@@ -1,0 +1,9 @@
+configuration:
+  initial_password:
+    name: Contraseña inicial
+    description: Contraseña para acceder por primera vez a la interfaz web de CC Tools.
+  timezone:
+    name: Zona horaria
+    description: Zona horaria utilizada para programar las automatizaciones.
+network:
+  8080/tcp: Interfaz web de CC Tools

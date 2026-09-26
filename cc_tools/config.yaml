@@ -1,0 +1,22 @@
+name: CC Tools
+version: "1.0.0"
+slug: cc_tools
+description: Automatiza tareas de Creality Cloud desde Home Assistant.
+url: https://github.com/TitoTB/CC-Tools-HA
+arch:
+  - amd64
+  - aarch64
+startup: services
+boot: auto
+init: false
+webui: "http://[HOST]:[PORT:8080]"
+ports:
+  8080/tcp: 8080
+ports_description:
+  8080/tcp: Interfaz web de CC Tools
+options:
+  initial_password: null
+  timezone: Europe/Madrid
+schema:
+  initial_password: password
+  timezone: str
