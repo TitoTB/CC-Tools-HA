@@ -427,6 +427,7 @@ app.patch('/api/config', requireAuth, async (req, res) => {
   const config = await readConfig();
   const input = req.body || {};
   let timezoneChanged = false;
+  let setupCompletedNow = false;
 
   if (input.session) {
     const timezone = String(input.session.timezone || '').trim();
@@ -654,6 +655,8 @@ app.patch('/api/config', requireAuth, async (req, res) => {
   config.tasks.modelCollections.nextRunAt = '';
 
   if (input.setup) {
+    setupCompletedNow = config.setup.assistantCompleted !== true
+      && input.setup.assistantCompleted === true;
     config.setup.assistantCompleted = Boolean(input.setup.assistantCompleted);
   }
 
@@ -662,6 +665,10 @@ app.patch('/api/config', requireAuth, async (req, res) => {
   }
 
   await writeConfig(config);
+  if (setupCompletedNow) {
+    queueFavoriteProfilesFullRefresh(normalizeFavoriteProfiles(config.crealityFavorites), { source: 'schedule' })
+      .catch((error) => console.error('[favorites] initial refresh:', error.message));
+  }
   const runs = await readRuns();
   res.json({
     ok: true,

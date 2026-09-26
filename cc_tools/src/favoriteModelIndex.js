@@ -76,6 +76,8 @@ export function queueFavoriteProfilesFullRefresh(profiles = [], options = {}) {
 
 export async function queueConfiguredFavoriteSyncs() {
   const config = await readConfig();
+  if (!shouldSyncConfiguredFavorites(config)) return [];
+
   const designs = await readDesigns();
   let statsChanged = false;
   for (const profile of config.crealityFavorites) {
@@ -101,6 +103,11 @@ export async function queueConfiguredFavoriteSyncs() {
     const stale = emptyIndex || !profile.indexedAt || now - Date.parse(profile.indexedAt) >= DELTA_SYNC_INTERVAL_MS;
     if (full || stale) queueFavoriteProfileSync(profile, { full });
   }
+  return profiles;
+}
+
+export function shouldSyncConfiguredFavorites(config = {}) {
+  return config.setup?.assistantCompleted === true;
 }
 
 export async function syncFavoriteProfile(profile, options = {}) {

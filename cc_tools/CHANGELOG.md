@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3
+
+- Posponemos la indexación inicial de perfiles favoritos hasta completar el asistente.
+- Actualiza automáticamente Aguacatec y los demás favoritos al finalizar la configuración inicial.
+
 ## 1.0.2
 
 - Evita que la carga automática del perfil ocupe el navegador durante el asistente inicial.

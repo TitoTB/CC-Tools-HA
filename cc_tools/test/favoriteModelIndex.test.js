@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectFavoriteCandidates } from '../src/favoriteModelIndex.js';
+import { selectFavoriteCandidates, shouldSyncConfiguredFavorites } from '../src/favoriteModelIndex.js';
+
+test('pospone la indexación inicial hasta completar el asistente', () => {
+  assert.equal(shouldSyncConfiguredFavorites({ setup: { assistantCompleted: false } }), false);
+  assert.equal(shouldSyncConfiguredFavorites({}), false);
+  assert.equal(shouldSyncConfiguredFavorites({ setup: { assistantCompleted: true } }), true);
+});
 
 test('alterna candidatos entre perfiles favoritos para repartir las tareas', () => {
   const candidates = selectFavoriteCandidates([
