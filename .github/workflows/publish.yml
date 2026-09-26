@@ -93,23 +93,3 @@ jobs:
             latest
           registry-prefix: ghcr.io/titotb
           skip-existing: ${{ needs.init.outputs.version }}
-
-      - name: Make container packages public
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for package in cc-tools-ha amd64-cc-tools-ha aarch64-cc-tools-ha; do
-            published=false
-            for attempt in {1..10}; do
-              if gh api --method PATCH "/user/packages/container/${package}" -f visibility=public; then
-                published=true
-                break
-              fi
-              sleep 3
-            done
-            if [[ "${published}" != "true" ]]; then
-              echo "Could not make ${package} public." >&2
-              exit 1
-            fi
-          done
