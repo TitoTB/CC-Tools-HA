@@ -8,7 +8,7 @@ export CCTOOLS_HOST="0.0.0.0"
 export CCTOOLS_PORT="8080"
 export TZ="$(jq -r '.timezone // "Europe/Madrid"' "$OPTIONS_FILE" 2>/dev/null || echo "Europe/Madrid")"
 if ! CCTOOLS_INITIAL_PASSWORD="$(jq -er '.initial_password | select(type == "string" and length > 0)' "$OPTIONS_FILE" 2>/dev/null)"; then
-  echo "[cctools] Configura initial_password antes de iniciar el complemento." >&2
+  echo "Accede al apartado de configuración y establece una contraseña" >&2
   exit 1
 fi
 export CCTOOLS_INITIAL_PASSWORD
