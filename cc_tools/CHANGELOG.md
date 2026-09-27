@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.10
+
+- Evita que Home Assistant reutilice respuestas antiguas del estado y de los registros.
+- Actualiza los registros cada diez segundos mientras el apartado Logs está visible.
+
 ## 1.0.9
 
 - Añade la API local utilizada por la integración Creality Cloud para Home Assistant.
