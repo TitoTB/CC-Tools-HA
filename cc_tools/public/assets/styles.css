@@ -206,16 +206,6 @@ label span {
   background: var(--panel-strong);
 }
 
-#tab-session .session-password-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-#tab-session .session-password-grid label,
-#tab-session .session-password-grid input {
-  min-width: 0;
-}
-
 #tab-session .button-row button,
 #tab-session .button-row .button-like,
 #tab-session .session-inline-setting button {
@@ -471,8 +461,7 @@ label span {
 }
 
 .panel h2,
-.tool-card h2,
-.login-panel h1 {
+.tool-card h2 {
   margin: 0;
   letter-spacing: 0;
 }
@@ -1177,6 +1166,130 @@ label span {
   width: 15px;
   height: 15px;
   fill: currentColor;
+}
+
+.points-shop-orders {
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.points-shop-orders > h3 {
+  margin: 0 0 14px;
+  font-size: 1rem;
+}
+
+.points-shop-orders-list {
+  display: grid;
+  gap: 10px;
+}
+
+.points-shop-order {
+  position: relative;
+  display: flex;
+  min-height: 104px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 54px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.points-shop-order.is-shipped {
+  border-color: rgba(36, 170, 75, 0.38);
+  background: rgba(36, 170, 75, 0.09);
+}
+
+.points-shop-order.is-pending {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.points-shop-order-image {
+  display: block;
+  width: 96px;
+  height: 96px;
+  flex: 0 0 96px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.points-shop-order-details {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.points-shop-order-details strong {
+  font-size: 0.9rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.points-shop-order-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.points-shop-order-price img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.points-shop-order-status {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.points-shop-order.is-shipped .points-shop-order-status {
+  color: var(--accent);
+}
+
+.points-shop-order.is-pending .points-shop-order-status {
+  color: #f5b942;
+}
+
+.points-shop-order-archive {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(36, 170, 75, 0.46);
+  border-radius: 6px;
+  color: var(--accent);
+  background: rgba(36, 170, 75, 0.14);
+}
+
+.points-shop-order-archive:hover {
+  color: #fff;
+  background: rgba(36, 170, 75, 0.8);
+}
+
+.points-shop-order-archive svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.points-shop-orders-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .points-summary-table {
@@ -2731,21 +2844,23 @@ textarea {
   font-weight: 800;
 }
 
+.notification-option-placeholder {
+  min-height: 24px;
+}
+
 .check-option {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.check-option input,
-.remember-row input {
+.check-option input {
   width: 18px;
   min-height: 18px;
   accent-color: var(--accent);
 }
 
-.check-option span,
-.remember-row span {
+.check-option span {
   margin: 0;
   color: var(--text);
   font-size: 0.95rem;
@@ -3661,54 +3776,6 @@ textarea {
   box-shadow: var(--shadow);
 }
 
-.login-page {
-  display: grid;
-  place-items: center;
-}
-
-.login-shell {
-  width: min(420px, calc(100% - 32px));
-}
-
-.login-panel {
-  padding: 30px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(17, 20, 25, 0.92);
-  box-shadow: var(--shadow);
-}
-
-.form-stack {
-  display: grid;
-  gap: 14px;
-  margin-top: 24px;
-}
-
-.remember-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.login-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.login-button svg {
-  width: 15px;
-  height: 15px;
-  fill: currentColor;
-}
-
-.form-error {
-  margin: 0;
-  color: var(--bad);
-  font-weight: 700;
-}
-
 @media (max-width: 760px) {
   .points-shop-goal-controls {
     grid-template-columns: minmax(0, 1fr) 42px;
@@ -3740,8 +3807,8 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  #tab-session .session-password-grid {
-    grid-template-columns: 1fr;
+  .notification-option-placeholder {
+    display: none;
   }
 
   #tab-notifications .telegram-credentials-grid {

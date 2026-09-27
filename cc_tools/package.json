@@ -1,6 +1,6 @@
 {
   "name": "cc-tools",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "http-proxy-middleware": "^3.0.3",

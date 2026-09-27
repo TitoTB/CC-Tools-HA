@@ -1,5 +1,5 @@
 name: CC Tools
-version: "1.0.5"
+version: "1.0.6"
 slug: cc_tools
 description: Automatiza tareas de Creality Cloud desde Home Assistant.
 url: https://github.com/TitoTB/CC-Tools-HA
@@ -18,5 +18,4 @@ ports_description:
 options:
   timezone: Europe/Madrid
 schema:
-  initial_password: password?
   timezone: str

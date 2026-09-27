@@ -20,9 +20,9 @@ CC Tools permite automatizar distintas tareas de Creality Cloud desde Home Assis
 
 4. Cierra el diálogo de repositorios y busca **CC Tools** en la tienda.
 5. Abre su ficha y pulsa **Instalar**. La primera compilación puede tardar varios minutos.
-6. En la pestaña **Configuración**, establece una contraseña inicial y revisa la zona horaria.
+6. En la pestaña **Configuración**, revisa la zona horaria.
 7. Inicia el complemento y pulsa **Abrir interfaz web**.
-8. Accede con la contraseña configurada y completa el asistente inicial.
+8. Completa el asistente inicial.
 
 ## Actualizaciones
 

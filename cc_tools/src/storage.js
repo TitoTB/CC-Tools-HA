@@ -3,6 +3,7 @@ import path from 'path';
 import { canonicalModelUrl, modelKeyFromUrl, modelSlugFromUrl, sameModelIdentity } from './modelIdentity.js';
 import { DEFAULT_FAVORITE_PROFILE, normalizeFavoriteProfiles } from './favoriteProfiles.js';
 import { activateFinishPrintProfile, normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
+import { normalizeShopOrdersState } from './shopOrdersState.js';
 
 const DATA_DIR = process.env.CCTOOLS_DATA_DIR || path.resolve('data');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
@@ -23,10 +24,6 @@ let configBackupReady = false;
 
 const DEFAULT_CONFIG = {
   timezone: 'Europe/Madrid',
-  auth: {
-    passwordHash: '',
-    passwordSalt: ''
-  },
   setup: {
     assistantCompleted: false
   },
@@ -63,6 +60,7 @@ const DEFAULT_CONFIG = {
     error: ''
   },
   shopGoal: normalizeStoredShopGoal(),
+  shopOrders: normalizeShopOrdersState(),
   telegram: {
     botToken: '',
     chatId: '',
@@ -82,7 +80,8 @@ const DEFAULT_CONFIG = {
     notifyOnModelBoost: true,
     notifyOnModelBoostError: true,
     notifyOnShopRedemption: true,
-    notifyOnShopRedemptionError: true
+    notifyOnShopRedemptionError: true,
+    notifyOnShopOrderShipped: true
   },
   tasks: {
     creality: {
@@ -252,12 +251,14 @@ export async function readConfig() {
 export async function writeConfig(config) {
   const baseline = config?.[CONFIG_BASELINE] ? structuredClone(config[CONFIG_BASELINE]) : null;
   const requested = mergeConfig(DEFAULT_CONFIG, config);
+  delete requested.auth;
   return enqueue('config', async () => {
     await ensureDataDirs();
     const current = await loadConfigWithRecovery();
     const merged = baseline
       ? mergeConfig(current, configPatch(baseline, requested))
       : requested;
+    delete merged.auth;
     await writeConfigAtomic(merged);
     syncObject(config, merged);
     attachBaseline(config, merged);
@@ -787,6 +788,9 @@ async function loadConfigWithRecovery() {
   }
 
   const config = normalizeStoredConfig(parsed);
+  if (Object.prototype.hasOwnProperty.call(parsed, 'auth')) {
+    await writeJsonAtomic(CONFIG_PATH, config);
+  }
   if (!configBackupReady) {
     await writeJsonAtomic(CONFIG_BACKUP_PATH, config);
     configBackupReady = true;
@@ -838,12 +842,14 @@ export async function setDesignActionCompleted(designId, actionKey, completed) {
 
 function normalizeStoredConfig(stored) {
   const config = mergeConfig(DEFAULT_CONFIG, stored);
+  delete config.auth;
   const storedDownloadTask = config.tasks.modelDownloads;
   config.tasks.modelDownloads = Object.fromEntries(
     Object.keys(DEFAULT_CONFIG.tasks.modelDownloads).map((key) => [key, storedDownloadTask[key]])
   );
   config.crealityFavorites = normalizeFavoriteProfiles(config.crealityFavorites);
   config.shopGoal = normalizeStoredShopGoal(config.shopGoal);
+  config.shopOrders = normalizeShopOrdersState(config.shopOrders);
   config.tasks.finishPrint.printerProfiles = normalizeFinishPrintProfiles(config.tasks.finishPrint);
   activateFinishPrintProfile(
     config.tasks.finishPrint,

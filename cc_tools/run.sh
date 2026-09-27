@@ -7,19 +7,6 @@ export CCTOOLS_DATA_DIR="/data"
 export CCTOOLS_HOST="0.0.0.0"
 export CCTOOLS_PORT="8080"
 export TZ="$(jq -r '.timezone // "Europe/Madrid"' "$OPTIONS_FILE" 2>/dev/null || echo "Europe/Madrid")"
-CONFIG_FILE="${CCTOOLS_DATA_DIR}/config.json"
-CCTOOLS_INITIAL_PASSWORD="$(jq -r '.initial_password // empty' "$OPTIONS_FILE" 2>/dev/null || true)"
-
-if [[ -z "$CCTOOLS_INITIAL_PASSWORD" ]]; then
-  if ! jq -e '
-    ((.auth.passwordHash | type) == "string" and (.auth.passwordHash | length) > 0)
-      and ((.auth.passwordSalt | type) == "string" and (.auth.passwordSalt | length) > 0)
-  ' "$CONFIG_FILE" >/dev/null 2>&1; then
-    printf '\033[31m%s\033[0m\n' "Accede al apartado de configuración y establece una contraseña" >&2
-    exit 1
-  fi
-fi
-export CCTOOLS_INITIAL_PASSWORD
 
 mkdir -p /data/screenshots /data/browser-session
 

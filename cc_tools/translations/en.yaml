@@ -1,7 +1,4 @@
 configuration:
-  initial_password:
-    name: Initial password
-    description: Password used for the first sign-in to the CC Tools web interface.
   timezone:
     name: Time zone
     description: Time zone used to schedule automations.

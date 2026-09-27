@@ -1,19 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
-import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import {
-  changePassword,
-  createSession,
-  destroySession,
-  ensureInitialPassword,
-  requireAuth,
-  requirePageAuth,
-  verifyPassword
-} from './auth.js';
 import { openLoginBrowser, closeLoginBrowser } from './crealityTask.js';
 import {
   appendRun,
@@ -73,6 +63,15 @@ import { filterDesigns, normalizeDesignSort, sortDesigns } from './designSearch.
 import { buildCommentKindPlan, countTodayComments, normalizeComments } from './modelCommentTask.js';
 import { CATALOG_CATEGORIES, normalizeCatalogCategories } from './modelDownloadTask.js';
 import { normalizeShopGoal, readShopCatalog } from './shopGoal.js';
+import { readShopOrders } from './shopOrders.js';
+import { notifyShippedShopOrders } from './shopOrderNotifications.js';
+import {
+  archiveShopOrder,
+  markShopOrdersRefreshError,
+  mergeShopOrdersState,
+  shopOrdersRefreshDue,
+  shippedShopOrderTransitions
+} from './shopOrdersState.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,29 +81,10 @@ const host = process.env.CCTOOLS_HOST || '0.0.0.0';
 const port = Number(process.env.CCTOOLS_PORT || 8080);
 
 app.use(express.json({ limit: '1mb' }));
-app.use(cookieParser());
 
 app.use('/assets', express.static(path.join(publicDir, 'assets')));
 
-app.get('/login.html', (req, res) => {
-  res.sendFile(path.join(publicDir, 'login.html'));
-});
-
-app.post('/api/login', async (req, res) => {
-  const password = String(req.body?.password || '');
-  if (!(await verifyPassword(password))) {
-    return res.status(401).json({ ok: false, error: 'PASSWORD_INVALID' });
-  }
-  await createSession(res, Boolean(req.body?.remember));
-  res.json({ ok: true });
-});
-
-app.post('/api/logout', requireAuth, (req, res) => {
-  destroySession(req, res);
-  res.json({ ok: true });
-});
-
-app.get('/api/status', requireAuth, async (req, res) => {
+app.get('/api/status', async (req, res) => {
   const config = await readConfig();
   const runs = await readRuns();
   res.json({
@@ -121,7 +101,7 @@ app.get('/api/status', requireAuth, async (req, res) => {
   });
 });
 
-app.post('/api/automation/resume', requireAuth, async (req, res) => {
+app.post('/api/automation/resume', async (req, res) => {
   const config = await readConfig();
   config.automationHealth = {
     ...(config.automationHealth || {}),
@@ -142,7 +122,7 @@ app.post('/api/automation/resume', requireAuth, async (req, res) => {
   });
 });
 
-app.post('/api/points/refresh', requireAuth, async (req, res) => {
+app.post('/api/points/refresh', async (req, res) => {
   try {
     const config = await readConfig();
     const timezone = config.tasks.creality.timezone || 'Europe/Madrid';
@@ -168,7 +148,7 @@ app.post('/api/points/refresh', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/shop/catalog', requireAuth, async (req, res) => {
+app.get('/api/shop/catalog', async (req, res) => {
   try {
     const catalog = await readShopCatalog(req.query.region);
     res.json({ ok: true, ...catalog });
@@ -181,7 +161,43 @@ app.get('/api/shop/catalog', requireAuth, async (req, res) => {
   }
 });
 
-app.put('/api/shop/goal', requireAuth, async (req, res) => {
+app.post('/api/shop/orders/refresh', async (_req, res) => {
+  const config = await readConfig();
+  if (!shopOrdersRefreshDue(config.shopOrders)) {
+    return res.json({ ok: true, orders: config.shopOrders, refreshed: false });
+  }
+  try {
+    const orders = await readShopOrders();
+    const previousOrders = config.shopOrders;
+    config.shopOrders = mergeShopOrdersState(previousOrders, orders);
+    const shippedOrders = shippedShopOrderTransitions(previousOrders, config.shopOrders);
+    await writeConfig(config);
+    await notifyShippedShopOrders(config, shippedOrders);
+    return res.json({ ok: true, orders: config.shopOrders, refreshed: true });
+  } catch (error) {
+    if (!['BROWSER_BUSY', 'REMOTE_BROWSER_OPEN'].includes(error.code)) {
+      config.shopOrders = markShopOrdersRefreshError(config.shopOrders, error);
+      await writeConfig(config);
+    }
+    return res.status(409).json({
+      ok: false,
+      error: error.code || 'SHOP_ORDERS_REFRESH_FAILED',
+      message: error.message || 'No se pudieron actualizar los pedidos de Creality Cloud.',
+      orders: config.shopOrders
+    });
+  }
+});
+
+app.patch('/api/shop/orders/:id/archive', async (req, res) => {
+  const config = await readConfig();
+  const orders = archiveShopOrder(config.shopOrders, req.params.id);
+  if (!orders) return res.status(404).json({ ok: false, error: 'SHOP_ORDER_NOT_ARCHIVABLE' });
+  config.shopOrders = orders;
+  await writeConfig(config);
+  return res.json({ ok: true, orders });
+});
+
+app.put('/api/shop/goal', async (req, res) => {
   const product = req.body?.product || {};
   const productId = String(product.id || '').trim();
   const name = String(product.name || '').trim();
@@ -207,14 +223,14 @@ app.put('/api/shop/goal', requireAuth, async (req, res) => {
   res.json({ ok: true, goal: config.shopGoal });
 });
 
-app.delete('/api/shop/goal', requireAuth, async (req, res) => {
+app.delete('/api/shop/goal', async (req, res) => {
   const config = await readConfig();
   config.shopGoal = normalizeShopGoal();
   await writeConfig(config);
   res.json({ ok: true, goal: config.shopGoal });
 });
 
-app.post('/api/creality/profile/refresh', requireAuth, async (req, res) => {
+app.post('/api/creality/profile/refresh', async (req, res) => {
   if (browserManagerState().active) {
     return res.status(409).json({ ok: false, error: 'BROWSER_BUSY' });
   }
@@ -229,7 +245,7 @@ app.post('/api/creality/profile/refresh', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/creality/favorites', requireAuth, async (req, res) => {
+app.post('/api/creality/favorites', async (req, res) => {
   const parsed = parseFavoriteProfileUrl(req.body?.url);
   if (!parsed) {
     return res.status(400).json({ ok: false, error: 'FAVORITE_PROFILE_URL_INVALID' });
@@ -263,7 +279,7 @@ app.post('/api/creality/favorites', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/creality/favorites/refresh', requireAuth, async (req, res) => {
+app.post('/api/creality/favorites/refresh', async (req, res) => {
   const config = await readConfig();
   let favorites = normalizeFavoriteProfiles(config.crealityFavorites);
   const alreadyRunning = favoriteProfilesRefreshRunning();
@@ -282,7 +298,7 @@ app.post('/api/creality/favorites/refresh', requireAuth, async (req, res) => {
   });
 });
 
-app.delete('/api/creality/favorites/:userId', requireAuth, async (req, res) => {
+app.delete('/api/creality/favorites/:userId', async (req, res) => {
   const userId = String(req.params.userId || '').trim();
   if (!/^\d+$/.test(userId)) {
     return res.status(400).json({ ok: false, error: 'FAVORITE_PROFILE_INVALID' });
@@ -299,7 +315,7 @@ app.delete('/api/creality/favorites/:userId', requireAuth, async (req, res) => {
   return res.json({ ok: true, favorites: config.crealityFavorites });
 });
 
-app.post('/api/tasks/finish-print/discover-printers', requireAuth, async (req, res) => {
+app.post('/api/tasks/finish-print/discover-printers', async (req, res) => {
   try {
     const printers = await discoverPrinters();
     res.json({ ok: true, printers });
@@ -308,7 +324,7 @@ app.post('/api/tasks/finish-print/discover-printers', requireAuth, async (req, r
   }
 });
 
-app.post('/api/tasks/finish-print/discover-files', requireAuth, async (req, res) => {
+app.post('/api/tasks/finish-print/discover-files', async (req, res) => {
   try {
     const files = await discoverGcodeFiles({
       name: String(req.body?.printerName || '').trim(),
@@ -321,7 +337,7 @@ app.post('/api/tasks/finish-print/discover-files', requireAuth, async (req, res)
   }
 });
 
-app.post('/api/tasks/finish-print/run', requireAuth, async (req, res) => {
+app.post('/api/tasks/finish-print/run', async (req, res) => {
   try {
     const result = await runTaskNow('finishPrint', 'manual');
     res.json({ ok: true, ...result });
@@ -334,7 +350,7 @@ app.post('/api/tasks/finish-print/run', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/finish-print/run-selected', requireAuth, async (req, res) => {
+app.post('/api/tasks/finish-print/run-selected', async (req, res) => {
   try {
     const result = await runTaskNow('finishPrint', 'manual', {
       finishPrintSelection: {
@@ -354,7 +370,6 @@ app.post('/api/tasks/finish-print/run-selected', requireAuth, async (req, res) =
 
 app.post(
   '/api/tasks/comments/images',
-  requireAuth,
   express.raw({ type: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], limit: '10mb' }),
   async (req, res) => {
     try {
@@ -385,7 +400,7 @@ app.post(
   }
 );
 
-app.post('/api/tasks/comments/run', requireAuth, async (req, res) => {
+app.post('/api/tasks/comments/run', async (req, res) => {
   try {
     const result = await runTaskNow('comments', 'manual');
     res.json({ ok: true, ...result });
@@ -398,7 +413,7 @@ app.post('/api/tasks/comments/run', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/model-boosts/run', requireAuth, async (req, res) => {
+app.post('/api/tasks/model-boosts/run', async (req, res) => {
   try {
     const result = await runTaskNow('modelBoosts', 'manual');
     res.json({ ok: true, ...result });
@@ -411,7 +426,7 @@ app.post('/api/tasks/model-boosts/run', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/schedule/preview', requireAuth, async (req, res) => {
+app.get('/api/schedule/preview', async (req, res) => {
   const config = await readConfig();
   const runs = await readRuns();
   if (ensureCurrentDownloadPlan(config.tasks.modelDownloads, runs)) {
@@ -423,7 +438,7 @@ app.get('/api/schedule/preview', requireAuth, async (req, res) => {
   });
 });
 
-app.patch('/api/config', requireAuth, async (req, res) => {
+app.patch('/api/config', async (req, res) => {
   const config = await readConfig();
   const input = req.body || {};
   let timezoneChanged = false;
@@ -460,6 +475,7 @@ app.patch('/api/config', requireAuth, async (req, res) => {
     config.telegram.notifyOnModelBoostError = input.telegram.notifyOnModelBoostError !== false;
     config.telegram.notifyOnShopRedemption = input.telegram.notifyOnShopRedemption !== false;
     config.telegram.notifyOnShopRedemptionError = input.telegram.notifyOnShopRedemptionError !== false;
+    config.telegram.notifyOnShopOrderShipped = input.telegram.notifyOnShopOrderShipped !== false;
     if (String(input.telegram.botToken || '').trim()) {
       config.telegram.botToken = String(input.telegram.botToken).trim();
     }
@@ -677,25 +693,7 @@ app.patch('/api/config', requireAuth, async (req, res) => {
   });
 });
 
-app.post('/api/password', requireAuth, async (req, res) => {
-  const currentPassword = String(req.body?.currentPassword || '');
-  const password = String(req.body?.password || '');
-  const confirmPassword = String(req.body?.confirmPassword || '');
-  if (!(await verifyPassword(currentPassword))) {
-    return res.status(401).json({ ok: false, error: 'CURRENT_PASSWORD_INVALID' });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ ok: false, error: 'PASSWORD_TOO_SHORT' });
-  }
-  if (password !== confirmPassword) {
-    return res.status(400).json({ ok: false, error: 'PASSWORD_MISMATCH' });
-  }
-  await changePassword(password);
-  destroySession(req, res);
-  res.json({ ok: true });
-});
-
-app.post('/api/telegram/test', requireAuth, async (req, res) => {
+app.post('/api/telegram/test', async (req, res) => {
   const config = await readConfig();
   try {
     await sendTelegram(config, 'CC Tools: prueba de Telegram correcta.');
@@ -705,7 +703,7 @@ app.post('/api/telegram/test', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/creality/run', requireAuth, async (req, res) => {
+app.post('/api/tasks/creality/run', async (req, res) => {
   try {
     const result = await runTaskNow('creality', 'manual', { skipRaffle: true });
     res.json({ ok: true, result });
@@ -714,7 +712,7 @@ app.post('/api/tasks/creality/run', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/model-downloads/run', requireAuth, async (req, res) => {
+app.post('/api/tasks/model-downloads/run', async (req, res) => {
   try {
     const result = await runTaskNow('modelDownloads', 'manual', { test: Boolean(req.body?.test) });
     res.json({ ok: true, result });
@@ -723,7 +721,7 @@ app.post('/api/tasks/model-downloads/run', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/model-likes/run', requireAuth, async (req, res) => {
+app.post('/api/tasks/model-likes/run', async (req, res) => {
   try {
     const result = await runTaskNow('modelLikes', 'manual', { test: Boolean(req.body?.test) });
     res.json({ ok: true, result });
@@ -732,11 +730,11 @@ app.post('/api/tasks/model-likes/run', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/model-collections/run', requireAuth, async (req, res) => {
+app.post('/api/tasks/model-collections/run', async (req, res) => {
   res.status(410).json({ ok: false, error: 'TOOL_HIDDEN' });
 });
 
-app.get('/api/designs', requireAuth, async (req, res) => {
+app.get('/api/designs', async (req, res) => {
   const page = clamp(Number(req.query.page), 1, Number.MAX_SAFE_INTEGER, 1);
   const pageSize = 20;
   const query = String(req.query.q || '').slice(0, 120);
@@ -770,7 +768,7 @@ app.get('/api/designs', requireAuth, async (req, res) => {
   });
 });
 
-app.delete('/api/designs/:id', requireAuth, async (req, res) => {
+app.delete('/api/designs/:id', async (req, res) => {
   try {
     const design = await excludeDesign(String(req.params.id || ''));
     if (!design) return res.status(404).json({ ok: false, error: 'DESIGN_NOT_FOUND' });
@@ -780,11 +778,11 @@ app.delete('/api/designs/:id', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/tasks/model-downloads/categories', requireAuth, (_req, res) => {
+app.get('/api/tasks/model-downloads/categories', (_req, res) => {
   res.json({ ok: true, categories: CATALOG_CATEGORIES });
 });
 
-app.patch('/api/designs/:id/actions/:action', requireAuth, async (req, res) => {
+app.patch('/api/designs/:id/actions/:action', async (req, res) => {
   const actionKey = ({
     like: 'like_model',
     collection: 'add_to_collection'
@@ -917,7 +915,7 @@ async function appendManualDesignActionRun({
   });
 }
 
-app.post('/api/tasks/creality/login/open', requireAuth, async (req, res) => {
+app.post('/api/tasks/creality/login/open', async (req, res) => {
   try {
     const result = await openLoginBrowser();
     res.json({
@@ -930,7 +928,7 @@ app.post('/api/tasks/creality/login/open', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/tasks/creality/login/close', requireAuth, async (req, res) => {
+app.post('/api/tasks/creality/login/close', async (req, res) => {
   try {
     const result = await closeLoginBrowser();
     res.json({ ok: true, result });
@@ -939,16 +937,15 @@ app.post('/api/tasks/creality/login/close', requireAuth, async (req, res) => {
   }
 });
 
-app.use('/screenshots', requirePageAuth, express.static(screenshotsDir()));
-app.use('/novnc', requirePageAuth, createProxyMiddleware({
+app.use('/screenshots', express.static(screenshotsDir()));
+app.use('/novnc', createProxyMiddleware({
   target: 'http://127.0.0.1:6081',
   changeOrigin: true,
   ws: true,
   pathRewrite: { '^/novnc': '' }
 }));
-app.use('/', requirePageAuth, express.static(publicDir, { index: 'index.html' }));
+app.use('/', express.static(publicDir, { index: 'index.html' }));
 
-await ensureInitialPassword();
 const startupConfig = await readConfig();
 if (startupConfig.tasks.modelCollections.enabled || startupConfig.tasks.modelCollections.nextRunAt) {
   startupConfig.tasks.modelCollections.enabled = false;
@@ -987,8 +984,7 @@ function sanitizeConfig(config) {
     telegram: {
       ...config.telegram,
       botToken: mask(config.telegram.botToken)
-    },
-    auth: undefined
+    }
   };
 }
 

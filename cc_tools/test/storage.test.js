@@ -17,22 +17,20 @@ after(async () => {
 });
 
 test('conserva cambios simultáneos realizados sobre distintas partes de la configuración', async () => {
-  const passwordUpdate = await storage.readConfig();
+  const pointsUpdate = await storage.readConfig();
   const schedulerUpdate = await storage.readConfig();
 
-  passwordUpdate.auth.passwordHash = 'nuevo-hash';
-  passwordUpdate.auth.passwordSalt = 'nueva-sal';
+  pointsUpdate.points.total = 1234;
   schedulerUpdate.tasks.creality.lastStatus = 'success';
   schedulerUpdate.tasks.creality.lastMessage = 'Check-in completado';
 
   await Promise.all([
-    storage.writeConfig(passwordUpdate),
+    storage.writeConfig(pointsUpdate),
     storage.writeConfig(schedulerUpdate)
   ]);
 
   const saved = await storage.readConfig();
-  assert.equal(saved.auth.passwordHash, 'nuevo-hash');
-  assert.equal(saved.auth.passwordSalt, 'nueva-sal');
+  assert.equal(saved.points.total, 1234);
   assert.equal(saved.tasks.creality.lastStatus, 'success');
   assert.equal(saved.tasks.creality.lastMessage, 'Check-in completado');
 });
@@ -102,6 +100,18 @@ test('migra la zona horaria anterior a la configuración global', async () => {
   assert.equal(migrated.tasks.modelDownloads.timezone, 'Atlantic/Canary');
 });
 
+test('elimina las credenciales internas heredadas de la configuración', async () => {
+  const legacy = await storage.readConfig();
+  legacy.auth = { passwordHash: 'hash-antiguo', passwordSalt: 'sal-antigua' };
+  await fs.writeFile(path.join(temporaryDataDir, 'config.json'), JSON.stringify(legacy));
+
+  const migrated = await storage.readConfig();
+  const stored = JSON.parse(await fs.readFile(path.join(temporaryDataDir, 'config.json'), 'utf8'));
+
+  assert.equal(Object.hasOwn(migrated, 'auth'), false);
+  assert.equal(Object.hasOwn(stored, 'auth'), false);
+});
+
 test('recupera automáticamente una configuración vacía desde la copia de respaldo', async () => {
   const config = await storage.readConfig();
   config.telegram.enabled = true;
@@ -111,9 +121,9 @@ test('recupera automáticamente una configuración vacía desde la copia de resp
   const recovered = await storage.readConfig();
   const restoredFile = JSON.parse(await fs.readFile(path.join(temporaryDataDir, 'config.json'), 'utf8'));
 
-  assert.equal(recovered.auth.passwordHash, 'nuevo-hash');
+  assert.equal(recovered.points.total, 1234);
   assert.equal(recovered.telegram.enabled, true);
-  assert.equal(restoredFile.auth.passwordHash, 'nuevo-hash');
+  assert.equal(restoredFile.points.total, 1234);
   assert.equal(restoredFile.telegram.enabled, true);
 });
 

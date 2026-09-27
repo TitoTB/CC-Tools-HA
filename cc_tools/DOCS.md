@@ -4,20 +4,16 @@ CC Tools ejecuta automatizaciones de Creality Cloud desde Home Assistant.
 
 ## Configuración
 
-Antes de iniciar el complemento debes configurar:
+Antes de iniciar el complemento puedes configurar:
 
-- `initial_password`: contraseña obligatoria para el primer acceso a la interfaz web.
 - `timezone`: zona horaria utilizada para planificar las automatizaciones. El valor predeterminado es `Europe/Madrid`.
-
-La contraseña inicial solo se aplica cuando CC Tools todavía no tiene una contraseña guardada. Después puedes cambiarla desde **Ajustes > Sesión**.
 
 ## Primer acceso
 
 1. Guarda la configuración del complemento.
 2. Inicia CC Tools.
 3. Pulsa **Abrir interfaz web**.
-4. Introduce la contraseña inicial.
-5. Completa el asistente para iniciar sesión en Creality Cloud y, opcionalmente, configurar Telegram.
+4. Completa el asistente para iniciar sesión en Creality Cloud y, opcionalmente, configurar Telegram.
 
 ## Datos persistentes
 

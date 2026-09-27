@@ -17,6 +17,14 @@ import {
 import { buildCommentKindPlan, countTodayComments, runModelComment } from './modelCommentTask.js';
 import { checkModelBoostAvailability, runModelBoost } from './modelBoostTask.js';
 import { redeemShopGoal } from './shopGoal.js';
+import { readShopOrders } from './shopOrders.js';
+import { notifyShippedShopOrders } from './shopOrderNotifications.js';
+import {
+  markShopOrdersRefreshError,
+  mergeShopOrdersState,
+  shopOrdersRefreshDue,
+  shippedShopOrderTransitions
+} from './shopOrdersState.js';
 
 const TASK_IDS = ['creality', 'finishPrint', 'modelDownloads', 'comments', 'modelBoosts', 'modelLikes'];
 const MIN_AUTOMATION_GAP_MINUTES = 10;
@@ -154,6 +162,7 @@ async function tick() {
   if (running) return;
 
   const config = await readConfig();
+  if (await refreshScheduledShopOrders(config)) return;
   if (await holdForAutomationHealth(config)) return;
   const runs = await readRuns();
   if (await redeemScheduledShopGoal(config)) return;
@@ -204,6 +213,31 @@ async function tick() {
       });
       break;
     }
+  }
+}
+
+async function refreshScheduledShopOrders(config, now = new Date()) {
+  if (config.setup?.assistantCompleted !== true) return false;
+  if (!shopOrdersRefreshDue(config.shopOrders, now)) return false;
+  running = true;
+  runningTask = 'shopOrders';
+  try {
+    const orders = await readShopOrders();
+    const previousOrders = config.shopOrders;
+    config.shopOrders = mergeShopOrdersState(previousOrders, orders, now);
+    const shippedOrders = shippedShopOrderTransitions(previousOrders, config.shopOrders);
+    await writeConfig(config);
+    await notifyShippedShopOrders(config, shippedOrders);
+    return true;
+  } catch (error) {
+    if (['BROWSER_BUSY', 'REMOTE_BROWSER_OPEN'].includes(error.code)) return false;
+    config.shopOrders = markShopOrdersRefreshError(config.shopOrders, error, now);
+    await writeConfig(config);
+    console.error('[shop-orders]', error.message);
+    return true;
+  } finally {
+    running = false;
+    runningTask = '';
   }
 }
 
@@ -438,6 +472,7 @@ function taskDisplayName(taskId) {
     comments: 'Comentarios',
     modelBoosts: 'Impulsar diseños',
     modelLikes: 'Dar me gusta',
+    shopOrders: 'Seguimiento de pedidos',
     shopRedemption: 'Canje de objetivo'
   })[taskId] || taskId;
 }

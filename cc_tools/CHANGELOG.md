@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.6
+
+- Elimina la contraseña y el inicio de sesión internos del panel de CC Tools.
+- Corrige la verificación del check-in y utiliza todos los boletos de lotería recibidos sin registrar falsos fallos.
+- Añade el seguimiento diario de pedidos de la tienda de regalos al historial de puntos.
+- Permite archivar pedidos enviados y notificarlos por Telegram cuando pasan de pendiente a enviado.
+
 ## 1.0.5
 
 - Recupera automáticamente el perfil y el avatar de Creality Cloud después del inicio de sesión del asistente.

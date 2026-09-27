@@ -49,6 +49,7 @@ const state = {
   shopRegions: [{ code: 'ES', name: 'España', area: 'Europe', imageUrl: '' }],
   shopRegionsLoaded: false,
   shopCatalogLoading: false,
+  shopOrdersLoading: false,
   shopGoalInitialized: false,
   selectedShopProductId: '',
   selectedShopRegion: ''
@@ -69,9 +70,6 @@ const fields = {
   windowStart: $('#window-start'),
   windowEnd: $('#window-end'),
   sessionTimezone: $('#session-timezone'),
-  currentPassword: $('#current-password'),
-  newPassword: $('#new-password'),
-  confirmPassword: $('#confirm-password'),
   crealityDailyBadge: $('#creality-daily-badge'),
   finishPrintLastRun: $('#finish-print-last-run'),
   finishPrintNextRun: $('#finish-print-next-run'),
@@ -159,6 +157,7 @@ const fields = {
   notifyModelBoostError: $('#notify-model-boost-error'),
   notifyShopRedemption: $('#notify-shop-redemption'),
   notifyShopRedemptionError: $('#notify-shop-redemption-error'),
+  notifyShopOrderShipped: $('#notify-shop-order-shipped'),
   runs: $('#runs'),
   healthSummary: $('#health-summary'),
   pointsCounter: $('#points-counter'),
@@ -177,6 +176,7 @@ const fields = {
   pointsShopRegionMenu: $('#points-shop-region-menu'),
   pointsShopProductPreview: $('#points-shop-product-preview'),
   pointsShopGoalStatus: $('#points-shop-goal-status'),
+  pointsShopOrdersList: $('#points-shop-orders-list'),
   programPointsShopGoal: $('#program-points-shop-goal'),
   favoriteProfileUrl: $('#favorite-profile-url'),
   favoriteProfilesList: $('#favorite-profiles-list'),
@@ -365,11 +365,42 @@ fields.pointsShopProductPreview.addEventListener('click', async (event) => {
   renderPointsCounter(state.config.points || {});
   toast('Programación del canje eliminada.');
 });
+fields.pointsShopOrdersList.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-archive-shop-order]');
+  if (!button) return;
+  button.disabled = true;
+  const result = await api(`/api/shop/orders/${encodeURIComponent(button.dataset.archiveShopOrder)}/archive`, {
+    method: 'PATCH'
+  });
+  if (!result.ok) {
+    button.disabled = false;
+    return toast(errorMessage(result.error, result));
+  }
+  state.config.shopOrders = result.orders;
+  renderShopOrders(result.orders);
+  toast('Pedido archivado.');
+});
 
 async function openPointsHistory() {
   fields.pointsHistoryModal.hidden = false;
   renderPointsHistory(state.config?.points || {});
   renderShopGoal(state.config?.shopGoal || {});
+  renderShopOrders(state.config?.shopOrders || {});
+  refreshShopOrders().catch(() => {});
+}
+
+async function refreshShopOrders() {
+  if (state.shopOrdersLoading) return;
+  state.shopOrdersLoading = true;
+  try {
+    const result = await api('/api/shop/orders/refresh', { method: 'POST' });
+    if (result.orders) {
+      state.config.shopOrders = result.orders;
+      renderShopOrders(result.orders);
+    }
+  } finally {
+    state.shopOrdersLoading = false;
+  }
 }
 
 async function loadShopCatalog({ force = false, preferredProduct = null } = {}) {
@@ -503,13 +534,6 @@ fields.favoriteProfilesList.addEventListener('click', async (event) => {
   renderFavoriteProfiles(result.favorites);
   toast('Perfil eliminado de favoritos.');
 });
-
-async function logoutCcTools() {
-  await api('/api/logout', { method: 'POST' });
-  window.location.href = '/login.html';
-}
-
-$('#creality-menu-logout').addEventListener('click', logoutCcTools);
 
 fields.crealityEnabled.addEventListener('change', async () => {
   if (await saveConfig({ includeCreality: true })) {
@@ -964,38 +988,7 @@ $('#close-login').addEventListener('click', async () => {
 });
 
 $('#save-session').addEventListener('click', async () => {
-  const currentPassword = fields.currentPassword.value;
-  const password = fields.newPassword.value;
-  const confirmPassword = fields.confirmPassword.value;
-  const passwordValues = [currentPassword, password, confirmPassword];
-  const changingPassword = passwordValues.some(Boolean);
-
-  if (changingPassword && passwordValues.some((value) => !value)) {
-    toast('Completa los tres campos para cambiar la contraseña.');
-    return;
-  }
-  if (changingPassword && password !== confirmPassword) {
-    toast(errorMessage('PASSWORD_MISMATCH'));
-    return;
-  }
-
-  if (!(await saveConfig({ includeSession: true }))) return;
-  if (!changingPassword) {
-    toast('Ajustes de sesión guardados.');
-    return;
-  }
-
-  const result = await api('/api/password', {
-    method: 'POST',
-    body: { currentPassword, password, confirmPassword }
-  });
-  if (result.ok) {
-    localStorage.removeItem('cctools_password');
-    toast('Contraseña cambiada. Vuelve a entrar.');
-    setTimeout(() => window.location.href = '/login.html', 900);
-  } else {
-    toast(errorMessage(result.error));
-  }
+  if (await saveConfig({ includeSession: true })) toast('Ajustes de sesión guardados.');
 });
 
 async function saveConfig(options = {}) {
@@ -1122,7 +1115,8 @@ async function saveConfig(options = {}) {
       notifyOnModelBoost: fields.notifyModelBoost.checked,
       notifyOnModelBoostError: fields.notifyModelBoostError.checked,
       notifyOnShopRedemption: fields.notifyShopRedemption.checked,
-      notifyOnShopRedemptionError: fields.notifyShopRedemptionError.checked
+      notifyOnShopRedemptionError: fields.notifyShopRedemptionError.checked,
+      notifyOnShopOrderShipped: fields.notifyShopOrderShipped.checked
     };
   }
 
@@ -1141,10 +1135,7 @@ async function saveConfig(options = {}) {
 
 async function refresh() {
   const result = await api('/api/status');
-  if (!result.ok) {
-    window.location.href = '/login.html';
-    return;
-  }
+  if (!result.ok) throw new Error(errorMessage(result.error, result));
   state.config = result.config;
   state.scheduler = result.scheduler || { running: false, runningTask: '' };
   state.nextExecutions = result.nextExecutions || {};
@@ -1216,10 +1207,6 @@ async function addCommentDraft() {
         headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
         body: file
       });
-      if (response.status === 401) {
-        window.location.href = '/login.html';
-        return false;
-      }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.ok) throw new Error(errorMessage(payload.error, payload));
       image = payload.image;
@@ -2279,6 +2266,7 @@ function render() {
   const collections = state.config.tasks.modelCollections;
   renderPointsCounter(state.config.points || {});
   renderShopGoal(state.config.shopGoal || {});
+  renderShopOrders(state.config.shopOrders || {});
   renderCrealityProfile(state.config.crealityProfile || {});
   renderFavoriteProfiles(state.config.crealityFavorites || []);
   renderDesignFavoriteAuthorFilter(state.config.crealityFavorites || []);
@@ -2352,6 +2340,7 @@ function render() {
   fields.notifyModelBoostError.checked = state.config.telegram.notifyOnModelBoostError !== false;
   fields.notifyShopRedemption.checked = state.config.telegram.notifyOnShopRedemption !== false;
   fields.notifyShopRedemptionError.checked = state.config.telegram.notifyOnShopRedemptionError !== false;
+  fields.notifyShopOrderShipped.checked = state.config.telegram.notifyOnShopOrderShipped !== false;
   syncNotificationMasters();
 
   renderRuns();
@@ -2414,7 +2403,8 @@ function notificationSuccessFields() {
     fields.notifyFinishPrint,
     fields.notifyComment,
     fields.notifyModelBoost,
-    fields.notifyShopRedemption
+    fields.notifyShopRedemption,
+    fields.notifyShopOrderShipped
   ];
 }
 
@@ -2541,6 +2531,35 @@ function renderShopGoal(goal = {}) {
   const status = goal.productId ? shopGoalStatusText(goal) : '';
   fields.pointsShopGoalStatus.hidden = !status;
   fields.pointsShopGoalStatus.textContent = status;
+}
+
+function renderShopOrders(value = {}) {
+  const orders = (Array.isArray(value.items) ? value.items : []).filter((order) => !order.archived);
+  if (!orders.length) {
+    const message = value.lastStatus === 'error'
+      ? 'No se pudieron actualizar los pedidos. Se conservará la última información disponible.'
+      : 'No hay pedidos pendientes de seguimiento.';
+    fields.pointsShopOrdersList.innerHTML = `<p class="points-shop-orders-empty">${escapeHtml(message)}</p>`;
+    return;
+  }
+
+  fields.pointsShopOrdersList.innerHTML = orders.map((order) => `
+    <article class="points-shop-order is-${escapeHtml(order.statusKind || 'neutral')}">
+      ${order.imageUrl
+        ? `<img class="points-shop-order-image" src="${escapeHtml(order.imageUrl)}" alt="">`
+        : '<span class="points-shop-order-image points-shop-order-image-placeholder"></span>'}
+      <div class="points-shop-order-details">
+        <strong>${escapeHtml(order.title)}</strong>
+        <span class="points-shop-order-price"><img src="/assets/points.png" alt="">${formatPoints(order.points)} puntos</span>
+        <span class="points-shop-order-status">${escapeHtml(order.status)}</span>
+      </div>
+      ${order.statusKind === 'shipped' ? `
+        <button class="points-shop-order-archive" type="button" data-archive-shop-order="${escapeHtml(order.id)}" title="Archivar pedido" aria-label="Archivar ${escapeHtml(order.title)}">
+          <svg viewBox="0 0 448 512" aria-hidden="true"><path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/></svg>
+        </button>
+      ` : ''}
+    </article>
+  `).join('');
 }
 
 function setShopRegionMenu(open) {
@@ -3367,9 +3386,6 @@ async function api(url, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined
   });
   const body = await response.json().catch(() => ({ ok: false, error: 'Respuesta no válida.' }));
-  if (response.status === 401) {
-    window.location.href = '/login.html';
-  }
   return body;
 }
 
@@ -3423,14 +3439,10 @@ function errorMessage(error, payload = {}) {
     return 'La hora de inicio y la hora de fin deben ser diferentes para programar el check-in.';
   }
   return ({
-    CURRENT_PASSWORD_INVALID: 'La contraseña actual no es correcta.',
-    PASSWORD_TOO_SHORT: 'La nueva contraseña debe tener al menos 8 caracteres.',
-    PASSWORD_MISMATCH: 'La confirmación no coincide con la nueva contraseña.',
-    PASSWORD_INVALID: 'Contraseña incorrecta.',
-    AUTH_REQUIRED: 'Sesión caducada. Vuelve a entrar.',
     FAVORITE_PROFILE_URL_INVALID: 'Introduce una URL válida de un perfil de Creality Cloud.',
     FAVORITE_PROFILE_IS_OWN: 'No puedes añadir tu propio perfil a favoritos.',
     FAVORITE_PROFILE_DUPLICATE: 'Este perfil ya está en favoritos.',
+    SHOP_ORDER_NOT_ARCHIVABLE: 'Este pedido no se puede archivar todavía.',
     FAVORITE_PROFILE_NOT_FOUND: 'No se pudo encontrar ese perfil en Creality Cloud.',
     FAVORITE_PROFILE_DEFAULT: 'El perfil predeterminado no se puede eliminar.',
     FAVORITE_PROFILE_UNAVAILABLE: 'No se pudieron obtener los datos del perfil.',

@@ -53,7 +53,21 @@ export async function runCrealityCheckin(options = {}) {
         ? await readPointsSummary(page, { timezone: options.timezone })
         : null;
       if (checkin.success) {
-        raffle = await executeRaffle(page, screenshots);
+        try {
+          raffle = await executeRaffle(page, screenshots);
+        } catch (error) {
+          const diagnostic = await diagnoseTaskError(error, page, observer);
+          const screenshot = await captureDiagnosticScreenshot(page, 'raffle', diagnostic.code);
+          if (screenshot) screenshots.push(screenshot);
+          raffle = {
+            success: false,
+            status: 'draw_failed',
+            warning: true,
+            reason: diagnostic.message,
+            prizes: [],
+            diagnostic
+          };
+        }
       }
       let pointsSummary = checkin.success
         ? await readPointsSummary(page, { timezone: options.timezone })
@@ -222,32 +236,42 @@ export async function executeRaffle(page, screenshots = [], options = {}) {
   const prizes = [];
   const initialTickets = tickets;
   for (let attempt = 1; tickets > 0 && attempt <= 10; attempt += 1) {
+    const previousDialog = await findVisibleRaffleDialog(page);
+    if (previousDialog && !(await dismissDialog(page, previousDialog))) {
+      screenshots.push(await takeScreenshot(page, `raffle-dialog-blocked-${attempt}`));
+      return raffleFailure(initialTickets, tickets, prizes, 'No se pudo cerrar el premio anterior');
+    }
+
     const startButton = page.locator('.start-btn').first();
     if (!(await startButton.count())) {
       screenshots.push(await takeScreenshot(page, `raffle-start-missing-${attempt}`));
-      return {
-        success: true,
-        status: prizes.length ? 'partial' : 'draw_failed',
-        warning: true,
-        reason: prizes.length
+      return raffleFailure(
+        initialTickets,
+        tickets,
+        prizes,
+        prizes.length
           ? 'No se pudo confirmar el resultado de uno de los sorteos'
-          : 'No se pudo encontrar el botón del sorteo',
-        tickets: initialTickets,
-        prizes
-      };
+          : 'No se pudo encontrar el botón del sorteo'
+      );
     }
 
     const previousTickets = tickets;
-    await startButton.click();
+    try {
+      await startButton.click({ timeout: 6000 });
+    } catch (error) {
+      screenshots.push(await takeScreenshot(page, `raffle-start-blocked-${attempt}`));
+      return raffleFailure(initialTickets, tickets, prizes, error.message);
+    }
 
-    const dialog = page.locator('.boost-win_dialog, .el-dialog__wrapper, [role="dialog"]').filter({ visible: true }).first();
-    const appeared = await dialog.waitFor({ state: 'visible', timeout: 6000 }).then(() => true).catch(() => false);
+    const dialog = await waitForRaffleDialog(page, 6000);
 
-    if (appeared) {
+    if (dialog) {
       const text = normalize(await dialog.locator('.win-name').first().textContent().catch(() => ''));
       prizes.push(text || extractPrize(normalize(await dialog.innerText().catch(() => 'Premio desconocido'))));
       screenshots.push(await takeScreenshot(page, `raffle-win-${attempt}`));
-      await dismissDialog(page, dialog);
+      if (!(await dismissDialog(page, dialog))) {
+        return raffleFailure(initialTickets, Math.max(0, previousTickets - 1), prizes, 'No se pudo cerrar el resultado del sorteo');
+      }
     } else {
       await page.waitForTimeout(2000);
       tickets = Number.parseInt((await counter.innerText()).trim(), 10) || 0;
@@ -256,26 +280,26 @@ export async function executeRaffle(page, screenshots = [], options = {}) {
         continue;
       }
       screenshots.push(await takeScreenshot(page, `raffle-error-${attempt}`));
-      return {
-        success: true,
-        status: prizes.length ? 'partial' : 'draw_failed',
-        warning: true,
-        reason: prizes.length
+      return raffleFailure(
+        initialTickets,
+        tickets,
+        prizes,
+        prizes.length
           ? 'No se pudo confirmar el resultado de uno de los sorteos'
-          : 'No se pudo confirmar el resultado del sorteo',
-        tickets: initialTickets,
-        prizes
-      };
+          : 'No se pudo confirmar el resultado del sorteo'
+      );
     }
 
-    await page.waitForTimeout(2000);
-    tickets = Number.parseInt((await counter.innerText()).trim(), 10) || 0;
+    tickets = await waitForTicketCount(page, counter, previousTickets);
   }
 
   return {
     success: true,
-    status: 'completed',
+    status: tickets <= 0 ? 'completed' : 'partial',
+    warning: tickets > 0,
+    reason: tickets > 0 ? 'Quedaron boletos pendientes después del límite de sorteos' : '',
     tickets: initialTickets,
+    remainingTickets: tickets,
     prizes
   };
 }
@@ -286,15 +310,70 @@ async function findRewardText(container) {
 }
 
 async function dismissDialog(page, dialog) {
-  const button = dialog.locator('button, [role="button"], .cus-button, .el-button, span, div, a')
+  const button = dialog.locator('button, [role="button"], .cus-button, .el-button, .win-btn, [class*="confirm"], span, div, a')
     .filter({ hasText: /^\s*(Got\s*it|Entendido|Aceptar|Close|Confirm|OK|Ok)\s*$/i })
     .first();
   if (await button.count()) {
-    await button.click({ timeout: 4000 }).catch(() => {});
-  } else {
-    await page.keyboard.press('Escape');
+    await button.click({ timeout: 3000, force: true }).catch(() => {});
   }
-  await dialog.waitFor({ state: 'hidden', timeout: 4000 }).catch(() => {});
+  if (await dialog.isVisible().catch(() => false)) {
+    await dialog.evaluate((root) => {
+      const labels = /^(Got\s*it|Entendido|Aceptar|Close|Confirm|OK)$/i;
+      const controls = root.querySelectorAll('button, [role="button"], .cus-button, .el-button, .win-btn, [class*="confirm"], a, span, div');
+      const target = [...controls].find((element) => labels.test(String(element.textContent || '').trim()));
+      target?.click();
+    }).catch(() => {});
+  }
+  if (await dialog.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape').catch(() => {});
+  }
+  return dialog.waitFor({ state: 'hidden', timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+}
+
+async function findVisibleRaffleDialog(page) {
+  for (const selector of ['.boost-win_dialog', '.el-dialog__wrapper', '[role="dialog"]']) {
+    const dialogs = page.locator(selector);
+    for (let index = (await dialogs.count()) - 1; index >= 0; index -= 1) {
+      const dialog = dialogs.nth(index);
+      if (await dialog.isVisible().catch(() => false)) return dialog;
+    }
+  }
+  return null;
+}
+
+async function waitForRaffleDialog(page, timeout) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const dialog = await findVisibleRaffleDialog(page);
+    if (dialog) return dialog;
+    await page.waitForTimeout(250);
+  }
+  return null;
+}
+
+async function waitForTicketCount(page, counter, previousTickets) {
+  const deadline = Date.now() + 6000;
+  let tickets = previousTickets;
+  while (Date.now() < deadline) {
+    tickets = Number.parseInt((await counter.innerText()).trim(), 10) || 0;
+    if (tickets < previousTickets) return tickets;
+    await page.waitForTimeout(300);
+  }
+  return tickets;
+}
+
+export function raffleFailure(initialTickets, remainingTickets, prizes = [], reason = '') {
+  return {
+    success: false,
+    status: prizes.length ? 'partial' : 'draw_failed',
+    warning: true,
+    reason,
+    tickets: initialTickets,
+    remainingTickets,
+    prizes
+  };
 }
 
 async function takeScreenshot(page, label) {
@@ -326,6 +405,10 @@ function checkinDetails(checkin, raffle, pointsSummary) {
   const details = { checkin };
   if (raffle) details.raffle = raffle;
   if (pointsSummary) details.pointsSummary = pointsSummary;
+  if (raffle?.diagnostic) {
+    details.diagnostics = [raffle.diagnostic];
+    if (raffle.diagnostic.systemic) details.incident = raffle.diagnostic;
+  }
   if (checkin.diagnostic) {
     details.diagnostics = [checkin.diagnostic];
     if (checkin.diagnostic.systemic) details.incident = checkin.diagnostic;
@@ -333,7 +416,7 @@ function checkinDetails(checkin, raffle, pointsSummary) {
   return details;
 }
 
-function buildCheckinRunMessage(checkin, raffle) {
+export function buildCheckinRunMessage(checkin, raffle) {
   const lines = [];
   if (checkin.status === 'already_done') {
     lines.push('Check-in ya realizado');
@@ -357,7 +440,10 @@ function buildCheckinRunMessage(checkin, raffle) {
     lines.push('Lotería: no se pudo confirmar el resultado del sorteo');
   } else if (raffle.status === 'partial') {
     lines.push(formatRafflePrizes(raffle.prizes));
-    lines.push('Lotería: no se pudo confirmar el resultado de uno de los sorteos');
+    const remaining = Number(raffle.remainingTickets);
+    lines.push(Number.isFinite(remaining) && remaining > 0
+      ? `Lotería: ${remaining} ${remaining === 1 ? 'boleto pendiente' : 'boletos pendientes'}`
+      : 'Lotería: no se pudo confirmar el resultado de uno de los sorteos');
   }
   return lines.join('\n');
 }
