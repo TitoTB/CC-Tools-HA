@@ -575,9 +575,9 @@ export async function markDesignCommented(designId, comment = {}) {
 
     const now = new Date().toISOString();
     design.commentCompleted = true;
-    design.commentCompletedAt = design.commentCompletedAt || now;
+    design.commentCompletedAt = design.commentCompletedAt || comment.completedAt || now;
     design.commentKind = comment.kind === 'image' ? 'image' : 'text';
-    design.commentActionState = 'published';
+    design.commentActionState = comment.actionState === 'already_applied' ? 'already_applied' : 'published';
     design.commentLastAttemptAt = now;
     design.updatedAt = now;
 

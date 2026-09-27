@@ -725,15 +725,21 @@ fields.collectionsConfigModal.addEventListener('click', (event) => {
 });
 
 $('#save-config').addEventListener('click', async () => {
-  if (await saveConfig({ includeCreality: true })) toast('Configuración guardada.');
+  if (await programTool(fields.crealityEnabled, () => saveConfig({ includeCreality: true }))) {
+    toast('Configuración guardada.');
+  }
 });
 
 $('#save-models-config').addEventListener('click', async () => {
-  if (await saveConfig({ includeModels: true })) toast('Configuración guardada.');
+  if (await programTool(fields.modelsEnabled, () => saveConfig({ includeModels: true }))) {
+    toast('Configuración guardada.');
+  }
 });
 
 $('#save-likes-config').addEventListener('click', async () => {
-  if (await saveConfig({ includeLikes: true })) toast('Configuración guardada.');
+  if (await programTool(fields.likesEnabled, () => saveConfig({ includeLikes: true }))) {
+    toast('Configuración guardada.');
+  }
 });
 
 $('#save-collections-config').addEventListener('click', async () => {
@@ -853,7 +859,9 @@ fields.commentImage.addEventListener('change', () => {
 });
 $('#save-comments-config').addEventListener('click', async () => {
   if (fields.commentText.value.trim() && !(await addCommentDraft())) return;
-  if (await saveConfig({ includeComments: true })) toast('Configuración guardada.');
+  if (await programTool(fields.commentsEnabled, () => saveConfig({ includeComments: true }))) {
+    toast('Configuración guardada.');
+  }
 });
 $('#run-comments-now').addEventListener('click', runCommentsWithProgress);
 
@@ -870,7 +878,9 @@ fields.boostsConfigModal.addEventListener('click', (event) => {
 });
 
 $('#save-boosts-config').addEventListener('click', async () => {
-  if (await saveConfig({ includeModelBoosts: true })) toast('Configuración guardada.');
+  if (await programTool(fields.boostsEnabled, () => saveConfig({ includeModelBoosts: true }))) {
+    toast('Configuración guardada.');
+  }
 });
 
 $('#run-boosts-now').addEventListener('click', runBoostsWithProgress);
@@ -991,6 +1001,18 @@ $('#close-login').addEventListener('click', async () => {
 $('#save-session').addEventListener('click', async () => {
   if (await saveConfig({ includeSession: true })) toast('Ajustes de sesión guardados.');
 });
+
+async function programTool(toggle, save) {
+  const previous = toggle.checked;
+  toggle.checked = true;
+  let saved = false;
+  try {
+    saved = await save();
+    return saved;
+  } finally {
+    if (!saved) toggle.checked = previous;
+  }
+}
 
 async function saveConfig(options = {}) {
   const body = {};
@@ -1585,7 +1607,7 @@ async function handleFinishPrintProfileAction(event) {
     return;
   }
   if (action === 'save') {
-    await saveFinishPrinterProfiles();
+    await programTool(fields.finishPrintEnabled, saveFinishPrinterProfiles);
     return;
   }
   if (action === 'discover-printers') {

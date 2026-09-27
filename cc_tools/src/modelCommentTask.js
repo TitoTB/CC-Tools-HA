@@ -33,6 +33,7 @@ export async function runModelComment(taskConfig = {}, options = {}) {
     const page = context.pages()[0] || await context.newPage();
     const observer = observeCrealityPage(page, 'comments');
     const screenshots = [];
+    const alreadyApplied = [];
     try {
       const before = await readIncentiveProgress(page, observer, incentive.title, {
         timezone: taskConfig.timezone,
@@ -63,6 +64,7 @@ export async function runModelComment(taskConfig = {}, options = {}) {
         const candidate = candidates.shift();
         observer.responses.length = 0;
         observer.failedRequests.length = 0;
+        const commentFeedResponse = waitForCommentFeed(page);
         await page.goto(candidate.url, { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(3500);
         const pageDiagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
@@ -74,10 +76,28 @@ export async function runModelComment(taskConfig = {}, options = {}) {
         const ownership = await readModelOwnership(page);
         const updated = await updateDesignOwnership(candidate.id, ownership, options.ownUserId);
         if (isOwnModel(ownership, options.ownUserId)) continue;
+        const existingComment = await findExistingUserComment(page, commentFeedResponse, options.ownUserId);
+        if (existingComment) {
+          const updatedComment = await markDesignCommented(candidate.id, {
+            kind: existingComment.kind,
+            actionState: 'already_applied',
+            completedAt: existingComment.createdAt
+          });
+          alreadyApplied.push(updatedComment || candidate);
+          continue;
+        }
         design = updated || candidate;
         break;
       }
-      if (!design) return skipped('No hay diseños disponibles para comentar.');
+      if (!design) {
+        return skipped(
+          alreadyApplied.length
+            ? `${alreadyApplied.length} diseño(s) ya tenían un comentario del usuario conectado.`
+            : 'No hay diseños disponibles para comentar.',
+          null,
+          { alreadyApplied }
+        );
+      }
 
       const action = await postComment(page, entry, kind);
       const commentedDesign = await markDesignCommented(design.id, { kind });
@@ -108,6 +128,7 @@ export async function runModelComment(taskConfig = {}, options = {}) {
           details: {
             acted: [],
             commented: acted,
+            alreadyApplied,
             failures: [failureFromDiagnostic(diagnostic, { title: design.title, url: design.url })],
             diagnostics: [diagnostic],
             rewardVerification,
@@ -124,6 +145,7 @@ export async function runModelComment(taskConfig = {}, options = {}) {
         details: {
           acted,
           commented: acted,
+          alreadyApplied,
           failures: [],
           diagnostics: [],
           rewardVerification,
@@ -149,6 +171,7 @@ export async function runModelComment(taskConfig = {}, options = {}) {
         message: `${incentive.label}: no se pudo publicar.`,
         details: {
           acted: [],
+          alreadyApplied,
           failures: [failureFromDiagnostic(diagnostic, { title: design?.title, url: design?.url })],
           diagnostics: [diagnostic],
           incident: diagnostic.systemic ? diagnostic : null,
@@ -193,6 +216,25 @@ export function eligibleCommentsForKind(entries = [], kind = 'text') {
   return kind === 'image'
     ? entries.filter((entry) => entry?.image?.filename)
     : entries;
+}
+
+export function findUserCommentInFeed(payload = {}, userId = '') {
+  const expected = String(userId || '').trim();
+  if (!expected) return null;
+  const list = Array.isArray(payload?.result?.list) ? payload.result.list : [];
+  for (const entry of list) {
+    const comment = entry?.comment || entry;
+    const authorId = String(comment?.userId || comment?.userInfo?.userId || '').trim();
+    if (authorId !== expected) continue;
+    const pictures = Array.isArray(comment?.pictures) ? comment.pictures.filter(Boolean) : [];
+    return {
+      id: String(comment?.id || entry?.id || '').trim(),
+      userId: authorId,
+      kind: pictures.length ? 'image' : 'text',
+      createdAt: commentDate(comment?.createTime || comment?.lastModifyTime)
+    };
+  }
+  return null;
 }
 
 export function normalizeComments(values = []) {
@@ -246,6 +288,94 @@ export function buildCommentKindPlan(taskConfig = {}, counts = { image: 0, text:
     [kinds[index], kinds[swapIndex]] = [kinds[swapIndex], kinds[index]];
   }
   return kinds;
+}
+
+function waitForCommentFeed(page) {
+  return page.waitForResponse(
+    (response) => /\/api\/cxy\/comment\/modelFeedList(?:\?|$)/.test(response.url())
+      && response.request().method() === 'POST',
+    { timeout: 15000 }
+  ).catch(() => null);
+}
+
+async function findExistingUserComment(page, responsePromise, userId) {
+  const expected = String(userId || '').trim();
+  if (!expected) {
+    throw taskError('COMMENT_USER_ID_UNAVAILABLE', 'No se pudo identificar al usuario conectado antes de comprobar sus comentarios.');
+  }
+
+  const response = await responsePromise;
+  if (!response) {
+    throw taskError('COMMENT_HISTORY_UNAVAILABLE', 'Creality Cloud no cargó el historial de comentarios del diseño.');
+  }
+
+  const firstPayload = await response.json().catch(() => null);
+  if (!response.ok() || Number(firstPayload?.code) !== 0) {
+    throw taskError('COMMENT_HISTORY_UNAVAILABLE', firstPayload?.msg || 'Creality Cloud no permitió consultar los comentarios del diseño.');
+  }
+  const firstMatch = findUserCommentInFeed(firstPayload, expected);
+  if (firstMatch) return firstMatch;
+
+  const count = Math.max(0, Number(firstPayload?.result?.count) || 0);
+  const firstList = Array.isArray(firstPayload?.result?.list) ? firstPayload.result.list : [];
+  if (count <= firstList.length) return null;
+
+  let requestPayload = {};
+  try {
+    requestPayload = JSON.parse(response.request().postData() || '{}');
+  } catch {
+    throw taskError('COMMENT_HISTORY_UNAVAILABLE', 'Creality Cloud devolvió una consulta de comentarios no reconocida.');
+  }
+  const pageSize = 100;
+  const totalPages = Math.ceil(count / pageSize);
+  if (!requestPayload.modelGroupId || totalPages > 50) {
+    throw taskError('COMMENT_HISTORY_TOO_LARGE', 'El historial de comentarios es demasiado extenso para comprobarlo de forma segura.');
+  }
+
+  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+    const payload = await fetchCommentFeedPage(page, response.url(), {
+      ...requestPayload,
+      page: pageNumber,
+      pageSize
+    });
+    const match = findUserCommentInFeed(payload, expected);
+    if (match) return match;
+  }
+  return null;
+}
+
+async function fetchCommentFeedPage(page, url, payload) {
+  const result = await page.evaluate(async ({ endpoint, body }) => {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      payload: await response.json().catch(() => null)
+    };
+  }, { endpoint: url, body: payload });
+
+  if (!result.ok || Number(result.payload?.code) !== 0) {
+    throw taskError(
+      'COMMENT_HISTORY_UNAVAILABLE',
+      result.payload?.msg || `Creality Cloud no permitió consultar los comentarios (${result.status}).`
+    );
+  }
+  return result.payload;
+}
+
+function commentDate(value) {
+  if (Number.isFinite(Number(value))) {
+    const milliseconds = Number(value) < 10_000_000_000 ? Number(value) * 1000 : Number(value);
+    const date = new Date(milliseconds);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  const date = new Date(value || '');
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
 }
 
 async function postComment(page, entry, kind) {
@@ -312,12 +442,12 @@ function randomItem(values) {
   return values[Math.floor(Math.random() * values.length)];
 }
 
-function skipped(reason, rewardVerification = null) {
+function skipped(reason, rewardVerification = null, extra = {}) {
   return {
     success: true,
     skipped: true,
     message: reason,
-    details: { acted: [], failures: [], skipped: true, reason, rewardVerification }
+    details: { acted: [], failures: [], skipped: true, reason, rewardVerification, ...extra }
   };
 }
 

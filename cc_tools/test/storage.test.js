@@ -301,6 +301,24 @@ test('marca un diseño como comentado y actualiza su fecha de actividad', async 
   assert.ok(Date.parse(updated.updatedAt) >= Date.parse(previousUpdatedAt));
 });
 
+test('registra como ya aplicado un comentario encontrado en Creality Cloud', async () => {
+  const created = await storage.appendDesign({
+    title: 'Diseño comentado externamente',
+    url: 'https://www.crealitycloud.com/es/model-detail/external-comment'
+  });
+  const completedAt = '2026-09-26T11:28:11.000Z';
+
+  const updated = await storage.markDesignCommented(created.record.id, {
+    kind: 'text',
+    actionState: 'already_applied',
+    completedAt
+  });
+
+  assert.equal(updated.commentCompleted, true);
+  assert.equal(updated.commentActionState, 'already_applied');
+  assert.equal(updated.commentCompletedAt, completedAt);
+});
+
 test('recupera de los logs el estado de comentarios anteriores', async () => {
   const created = await storage.appendDesign({
     title: 'Comentario histórico',

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.8
+
+- Activa automáticamente cada herramienta al guardar su programación.
+- Evita publicar comentarios duplicados comprobando previamente el historial real del usuario en Creality Cloud.
+
 ## 1.0.7
 
 - Refuerza la primera conexión de noVNC con precarga y reintentos automáticos del visor.

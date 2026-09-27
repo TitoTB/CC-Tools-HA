@@ -5,6 +5,7 @@ import {
   countTodayComments,
   eligibleCommentDesigns,
   eligibleCommentsForKind,
+  findUserCommentInFeed,
   normalizeComments,
   prioritizedCommentCandidates,
   selectCommentKind
@@ -70,6 +71,30 @@ test('un modelo propio no es candidato para comentarios', () => {
   const external = { id: 'external', url: 'https://example.test/external', ownerUserId: '84' };
 
   assert.deepEqual(eligibleCommentDesigns([own, external], '42'), [external]);
+});
+
+test('detecta un comentario previo del usuario conectado en la respuesta de Creality', () => {
+  const payload = {
+    result: {
+      list: [{
+        id: 'feed-1',
+        comment: {
+          id: 'comment-1',
+          userId: 7963944884,
+          createTime: 1790422091,
+          pictures: ['photo.gif']
+        }
+      }]
+    }
+  };
+
+  assert.deepEqual(findUserCommentInFeed(payload, '7963944884'), {
+    id: 'comment-1',
+    userId: '7963944884',
+    kind: 'image',
+    createdAt: '2026-09-26T11:28:11.000Z'
+  });
+  assert.equal(findUserCommentInFeed(payload, '123'), null);
 });
 
 test('puede omitir la prioridad de autores favoritos', () => {
