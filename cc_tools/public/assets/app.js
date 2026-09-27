@@ -237,6 +237,10 @@ setInterval(() => {
   refreshLiveCounters().catch(() => {});
 }, 60 * 1000);
 
+setInterval(() => {
+  if (state.activeView === 'logs') refreshLiveCounters().catch(() => {});
+}, 10 * 1000);
+
 $('#brand-home').addEventListener('click', (event) => {
   event.preventDefault();
   showView('home');
@@ -1222,6 +1226,8 @@ async function refreshLiveCounters() {
   renderNextExecutions();
   renderDailyCounters();
   renderFavoriteProfiles(state.config.crealityFavorites);
+  renderRuns();
+  renderHealthSummary();
 }
 
 async function addCommentDraft() {
@@ -2273,6 +2279,7 @@ function showView(view) {
   for (const button of ['home', 'designs', 'settings', 'logs']) {
     $(`#nav-${button}`)?.classList.toggle('is-active', button === view);
   }
+  if (view === 'logs') refreshLiveCounters().catch(() => {});
 }
 
 function retryViewerConnection(viewer, url) {

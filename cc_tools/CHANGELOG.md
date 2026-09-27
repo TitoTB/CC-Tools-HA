@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9
+
+- Añade la API local utilizada por la integración Creality Cloud para Home Assistant.
+- Expone puntos, recompensas, tareas, pedidos, impresoras, controles y eventos de CC Tools.
+- Actualiza inmediatamente los registros al abrir Logs y cada diez segundos mientras el apartado está visible.
+
 ## 1.0.8
 
 - Activa automáticamente cada herramienta al guardar su programación.
