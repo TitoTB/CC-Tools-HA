@@ -56,6 +56,7 @@ const state = {
 };
 
 let profileRefreshAttempted = false;
+let setupAccountRefreshPromise = null;
 let favoriteRefreshPollTimer = null;
 let favoriteRefreshPollCount = 0;
 const DEFAULT_FAVORITE_USER_ID = '7963944884';
@@ -1170,6 +1171,22 @@ async function refreshCrealityProfile(browser = { mode: 'idle' }, { force = fals
   renderCrealityProfile(result.profile);
 }
 
+function refreshSetupAccountData() {
+  if (setupAccountRefreshPromise) return setupAccountRefreshPromise;
+
+  setupAccountRefreshPromise = (async () => {
+    await refreshCrealityProfile({ mode: 'idle' }, { force: true });
+    await refreshPointsHistory(false, true);
+    await refreshShopOrders();
+  })().catch(() => {
+    profileRefreshAttempted = false;
+  }).finally(() => {
+    setupAccountRefreshPromise = null;
+  });
+
+  return setupAccountRefreshPromise;
+}
+
 async function refreshLiveCounters() {
   const result = await api('/api/status');
   if (!result.ok) return;
@@ -2210,10 +2227,15 @@ async function openCrealityViewer() {
 
   viewer.document.write('<!doctype html><title>CC Tools</title><body style="margin:0;background:#0b0d10;color:#f4f7f6;font-family:system-ui;display:grid;place-items:center;height:100vh">Preparando Creality Cloud...</body>');
 
+  const viewerWarmup = fetch(`/novnc/vnc.html?preflight=${Date.now()}`, {
+    cache: 'no-store',
+    credentials: 'same-origin'
+  }).catch(() => null);
   const result = await api('/api/tasks/creality/login/open', { method: 'POST' });
   if (result.ok) {
+    await viewerWarmup;
     viewer.location.href = result.url;
-    retryViewerConnectionOnce(viewer, result.url);
+    retryViewerConnection(viewer, result.url);
     toast('Creality Cloud abierto en el visor remoto.');
   } else {
     viewer.close();
@@ -2231,19 +2253,35 @@ function showView(view) {
   }
 }
 
-function retryViewerConnectionOnce(viewer, url) {
-  window.setTimeout(() => {
+function retryViewerConnection(viewer, url) {
+  let checks = 0;
+  let reloads = 0;
+  let lastReloadAt = 0;
+
+  const checkConnection = () => {
     if (viewer.closed) return;
+    checks += 1;
     try {
       const status = viewer.document.querySelector('#noVNC_status')?.textContent?.trim() || '';
-      if (!/conectando|connecting/i.test(status)) return;
-      const retryUrl = new URL(url, window.location.href);
-      retryUrl.searchParams.set('retry', String(Date.now()));
-      viewer.location.replace(retryUrl.href);
+      const stalled = /conectando|connecting|desconectado|disconnected|fall[oó]|failed|error/i.test(status);
+      if (!stalled) return;
+
+      const now = Date.now();
+      if (reloads < 2 && now - lastReloadAt >= 5000) {
+        const retryUrl = new URL(url, window.location.href);
+        retryUrl.searchParams.set('retry', String(now));
+        reloads += 1;
+        lastReloadAt = now;
+        viewer.location.replace(retryUrl.href);
+      }
     } catch {
-      // The viewer may be navigating when the check runs; noVNC handles later reconnects.
+      // The viewer may still be navigating; keep checking until its document is available.
     }
-  }, 6000);
+
+    if (checks < 10) window.setTimeout(checkConnection, 2500);
+  };
+
+  window.setTimeout(checkConnection, 4000);
 }
 
 function showSettingsTab(tab) {
@@ -3145,9 +3183,7 @@ async function advanceWizard() {
       return;
     }
     profileRefreshAttempted = false;
-    refreshCrealityProfile({ mode: 'idle' }, { force: true }).catch(() => {
-      profileRefreshAttempted = false;
-    });
+    refreshSetupAccountData();
   }
 
   if (step === 2) {
@@ -3232,10 +3268,9 @@ async function completeWizard() {
   });
   if (result.ok) {
     state.config = result.config;
-    if (!state.config.crealityProfile?.userId && !profileRefreshAttempted) {
-      refreshCrealityProfile({ mode: 'idle' }, { force: true }).catch(() => {
-        profileRefreshAttempted = false;
-      });
+    if ((!state.config.crealityProfile?.userId || state.config.points?.historyComplete !== true)
+      && !setupAccountRefreshPromise) {
+      refreshSetupAccountData();
     }
   }
   fields.wizardModal.hidden = true;

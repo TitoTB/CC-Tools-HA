@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.7
+
+- Refuerza la primera conexión de noVNC con precarga y reintentos automáticos del visor.
+- Sincroniza el perfil, el historial completo de puntos y el seguimiento de pedidos después del primer inicio de sesión en Creality Cloud.
+
 ## 1.0.6
 
 - Elimina la contraseña y el inicio de sesión internos del panel de CC Tools.
