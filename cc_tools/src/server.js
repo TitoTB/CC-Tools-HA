@@ -87,6 +87,16 @@ const port = Number(process.env.CCTOOLS_PORT || 8080);
 
 app.use(express.json({ limit: '1mb' }));
 
+app.use('/api', (_req, res, next) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'Surrogate-Control': 'no-store'
+  });
+  next();
+});
+
 app.use('/assets', express.static(path.join(publicDir, 'assets')));
 
 app.get('/api/status', async (req, res) => {

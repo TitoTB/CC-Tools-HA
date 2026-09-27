@@ -3444,8 +3444,13 @@ function uniqueDiagnostics(values) {
 }
 
 async function api(url, options = {}) {
-  const response = await fetch(url, {
-    method: options.method || 'GET',
+  const method = options.method || 'GET';
+  const requestUrl = method === 'GET'
+    ? `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`
+    : url;
+  const response = await fetch(requestUrl, {
+    method,
+    cache: 'no-store',
     headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
