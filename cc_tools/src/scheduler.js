@@ -10,6 +10,7 @@ import { applyStartedVirtualPrint, manualVirtualPrintConfig, startVirtualPrint }
 import { isFinishPrintStartRun } from './finishPrintSelection.js';
 import { finishPrintSlotMinutes } from './finishPrintSchedule.js';
 import {
+  activateFinishPrintProfile,
   activateNextFinishPrintProfile,
   normalizeFinishPrintProfiles,
   syncActiveFinishPrintProfile
@@ -57,6 +58,17 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
   try {
     const config = await readConfig();
     const taskConfig = config.tasks[taskId];
+    if (taskId === 'finishPrint' && options.finishPrintProfileId) {
+      const profile = normalizeFinishPrintProfiles(taskConfig)
+        .find((item) => item.id === String(options.finishPrintProfileId));
+      if (!profile) {
+        const error = new Error('No se encontró la impresora configurada.');
+        error.code = 'FINISH_PRINT_PROFILE_NOT_FOUND';
+        throw error;
+      }
+      activateFinishPrintProfile(taskConfig, profile.id);
+      await writeConfig(config);
+    }
     const result = await executeTask(taskId, taskConfig, options, config);
     const status = result.skipped ? 'skipped' : result.success ? 'success' : 'failed';
     const message = formatRunMessage(taskId, status, result);
@@ -227,6 +239,19 @@ async function refreshScheduledShopOrders(config, now = new Date()) {
     config.shopOrders = mergeShopOrdersState(previousOrders, orders, now);
     const shippedOrders = shippedShopOrderTransitions(previousOrders, config.shopOrders);
     await writeConfig(config);
+    for (const order of shippedOrders) {
+      const finishedAt = new Date().toISOString();
+      await appendRun({
+        taskId: 'shopOrders',
+        source: 'schedule',
+        status: 'success',
+        message: `Pedido enviado: ${order.title}`,
+        startedAt: finishedAt,
+        finishedAt,
+        screenshots: [],
+        details: { order }
+      });
+    }
     await notifyShippedShopOrders(config, shippedOrders);
     return true;
   } catch (error) {

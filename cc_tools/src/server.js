@@ -72,6 +72,11 @@ import {
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
+import {
+  buildHomeAssistantEvents,
+  buildHomeAssistantState,
+  internalTaskId
+} from './homeAssistantApi.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -172,6 +177,7 @@ app.post('/api/shop/orders/refresh', async (_req, res) => {
     config.shopOrders = mergeShopOrdersState(previousOrders, orders);
     const shippedOrders = shippedShopOrderTransitions(previousOrders, config.shopOrders);
     await writeConfig(config);
+    await appendShippedOrderRuns(shippedOrders, 'manual');
     await notifyShippedShopOrders(config, shippedOrders);
     return res.json({ ok: true, orders: config.shopOrders, refreshed: true });
   } catch (error) {
@@ -296,6 +302,74 @@ app.post('/api/creality/favorites/refresh', async (req, res) => {
     favorites,
     alreadyRunning
   });
+});
+
+app.get('/api/integration/status', async (_req, res) => {
+  res.json(await homeAssistantState());
+});
+
+app.get('/api/integration/events', async (req, res) => {
+  res.json({
+    ok: true,
+    apiVersion: 1,
+    events: buildHomeAssistantEvents(await readRuns(), req.query.limit)
+  });
+});
+
+app.patch('/api/integration/tasks/:taskId', async (req, res) => {
+  const taskId = internalTaskId(req.params.taskId);
+  if (!taskId) return res.status(404).json({ ok: false, error: 'INTEGRATION_TASK_NOT_FOUND' });
+  try {
+    const config = await readConfig();
+    await setIntegrationTaskEnabled(config, taskId, req.body?.enabled === true);
+    await writeConfig(config);
+    return res.json(await homeAssistantState());
+  } catch (error) {
+    return res.status(409).json({
+      ok: false,
+      error: error.code || 'INTEGRATION_TASK_UPDATE_FAILED',
+      message: error.message || 'No se pudo actualizar la herramienta.'
+    });
+  }
+});
+
+app.post('/api/integration/tasks/:taskId/run', async (req, res) => {
+  const taskId = internalTaskId(req.params.taskId);
+  if (!taskId || taskId === 'finishPrint') {
+    return res.status(404).json({ ok: false, error: 'INTEGRATION_TASK_NOT_FOUND' });
+  }
+  if (schedulerState().running) {
+    return res.status(409).json({
+      ok: false,
+      error: 'TASK_ALREADY_RUNNING',
+      message: 'Ya hay una ejecución en curso.'
+    });
+  }
+  runTaskNow(taskId, 'manual').catch((error) => {
+    console.error('[home-assistant]', error.message);
+  });
+  return res.status(202).json({ ok: true, accepted: true });
+});
+
+app.post('/api/integration/printers/:printerId/run', async (req, res) => {
+  const printerId = String(req.params.printerId || '').trim();
+  const config = await readConfig();
+  if (!normalizeFinishPrintProfiles(config.tasks.finishPrint).some((profile) => profile.id === printerId)) {
+    return res.status(404).json({ ok: false, error: 'FINISH_PRINT_PROFILE_NOT_FOUND' });
+  }
+  if (schedulerState().running) {
+    return res.status(409).json({
+      ok: false,
+      error: 'TASK_ALREADY_RUNNING',
+      message: 'Ya hay una ejecución en curso.'
+    });
+  }
+  runTaskNow('finishPrint', 'manual', {
+    finishPrintProfileId: printerId
+  }).catch((error) => {
+    console.error('[home-assistant]', error.message);
+  });
+  return res.status(202).json({ ok: true, accepted: true });
 });
 
 app.delete('/api/creality/favorites/:userId', async (req, res) => {
@@ -986,6 +1060,78 @@ function sanitizeConfig(config) {
       botToken: mask(config.telegram.botToken)
     }
   };
+}
+
+async function homeAssistantState() {
+  const config = await readConfig();
+  const runs = await readRuns();
+  return buildHomeAssistantState({
+    config,
+    runs,
+    scheduler: schedulerState(),
+    browser: browserManagerState(),
+    dailyCounters: buildDailyCounters(config, runs),
+    nextExecutions: buildNextExecutions(config, runs),
+    health: buildHealthMetrics(config, runs)
+  });
+}
+
+async function setIntegrationTaskEnabled(config, taskId, enabled) {
+  const task = config.tasks?.[taskId];
+  if (!task) {
+    throw Object.assign(new Error('No se encontró la herramienta.'), { code: 'INTEGRATION_TASK_NOT_FOUND' });
+  }
+  if (taskId === 'modelLikes' && enabled && config.tasks.modelDownloads.enabled !== true) {
+    throw Object.assign(new Error('Activa primero Descubrir diseños.'), { code: 'MODEL_DOWNLOADS_REQUIRED' });
+  }
+  if (taskId === 'finishPrint' && enabled && !normalizeFinishPrintProfiles(task).length) {
+    throw Object.assign(new Error('Configura al menos una impresora en CC Tools.'), {
+      code: 'FINISH_PRINT_PROFILE_REQUIRED'
+    });
+  }
+
+  task.enabled = enabled;
+  if (!enabled) {
+    task.nextRunAt = '';
+    if (taskId === 'modelDownloads') {
+      task.downloadPlan = [];
+      task.downloadPlanCursor = 0;
+      config.tasks.modelLikes.enabled = false;
+      config.tasks.modelLikes.nextRunAt = '';
+    }
+    if (taskId === 'comments') {
+      task.commentPlan = [];
+      task.commentKindPlan = [];
+      task.commentPlanCursor = 0;
+    }
+    if (taskId === 'finishPrint') {
+      task.printerProfiles = normalizeFinishPrintProfiles(task).map((profile) => ({
+        ...profile,
+        printPlan: [],
+        printPlanCursor: 0,
+        nextRunAt: ''
+      }));
+      activateNextFinishPrintProfile(task, { sync: false });
+    }
+    return;
+  }
+  await rebuildSchedulesForTimezone(config);
+}
+
+async function appendShippedOrderRuns(orders, source) {
+  for (const order of orders) {
+    const finishedAt = new Date().toISOString();
+    await appendRun({
+      taskId: 'shopOrders',
+      source,
+      status: 'success',
+      message: `Pedido enviado: ${order.title}`,
+      startedAt: finishedAt,
+      finishedAt,
+      screenshots: [],
+      details: { order }
+    });
+  }
 }
 
 async function reconcileFinishPrintUsageHistory() {

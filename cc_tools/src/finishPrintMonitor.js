@@ -137,6 +137,8 @@ export async function checkPendingFinishPrint() {
       finishedAt: freshConfig.tasks.finishPrint.lastRunAt,
       details: {
         file,
+        printerProfileId: current.printerProfileId || '',
+        printerName: current.printerName || '',
         printRecord: result.printRecord,
         rewardVerification: result.rewardVerification,
         removedFromAutomaticSelection: !credited
@@ -220,6 +222,8 @@ async function finalizeCompletedWithoutVerifiedReward(config, pending, result) {
     finishedAt,
     details: {
       file,
+      printerProfileId: pending.printerProfileId || '',
+      printerName: pending.printerName || '',
       printRecord: result.printRecord,
       rewardVerification,
       verificationAttempts: Math.max(0, Number(pending.verificationAttempts) || 0)
