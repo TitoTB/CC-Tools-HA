@@ -740,7 +740,7 @@ app.patch('/api/config', async (req, res) => {
     }
   }
 
-  for (const taskId of ['modelLikes']) {
+  for (const taskId of ['modelLikes', 'modelCollections']) {
     if (!input[taskId]) continue;
     config.tasks[taskId].enabled = Boolean(input[taskId].enabled) && config.tasks.modelDownloads.enabled;
     config.tasks[taskId].windowStart = validClock(input[taskId].windowStart, '08:00');
@@ -750,9 +750,6 @@ app.patch('/api/config', async (req, res) => {
     config.tasks[taskId].dailyLimit = 1;
     config.tasks[taskId].nextRunAt = config.tasks[taskId].enabled ? scheduleNextRun(config.tasks[taskId]) : '';
   }
-
-  config.tasks.modelCollections.enabled = false;
-  config.tasks.modelCollections.nextRunAt = '';
 
   if (input.setup) {
     setupCompletedNow = config.setup.assistantCompleted !== true
@@ -815,7 +812,12 @@ app.post('/api/tasks/model-likes/run', async (req, res) => {
 });
 
 app.post('/api/tasks/model-collections/run', async (req, res) => {
-  res.status(410).json({ ok: false, error: 'TOOL_HIDDEN' });
+  try {
+    const result = await runTaskNow('modelCollections', 'manual');
+    res.json({ ok: true, result });
+  } catch (error) {
+    res.status(409).json({ ok: false, error: error.message });
+  }
 });
 
 app.get('/api/designs', async (req, res) => {
@@ -1030,12 +1032,6 @@ app.use('/novnc', createProxyMiddleware({
 }));
 app.use('/', express.static(publicDir, { index: 'index.html' }));
 
-const startupConfig = await readConfig();
-if (startupConfig.tasks.modelCollections.enabled || startupConfig.tasks.modelCollections.nextRunAt) {
-  startupConfig.tasks.modelCollections.enabled = false;
-  startupConfig.tasks.modelCollections.nextRunAt = '';
-  await writeConfig(startupConfig);
-}
 await reconcileDownloadRewardHistory();
 await reconcileDownloadedDesignHistory();
 await reconcileDesignActionHistory();
@@ -1091,7 +1087,7 @@ async function setIntegrationTaskEnabled(config, taskId, enabled) {
   if (!task) {
     throw Object.assign(new Error('No se encontró la herramienta.'), { code: 'INTEGRATION_TASK_NOT_FOUND' });
   }
-  if (taskId === 'modelLikes' && enabled && config.tasks.modelDownloads.enabled !== true) {
+  if (['modelLikes', 'modelCollections'].includes(taskId) && enabled && config.tasks.modelDownloads.enabled !== true) {
     throw Object.assign(new Error('Activa primero Descubrir diseños.'), { code: 'MODEL_DOWNLOADS_REQUIRED' });
   }
   if (taskId === 'finishPrint' && enabled && !normalizeFinishPrintProfiles(task).length) {
@@ -1108,6 +1104,8 @@ async function setIntegrationTaskEnabled(config, taskId, enabled) {
       task.downloadPlanCursor = 0;
       config.tasks.modelLikes.enabled = false;
       config.tasks.modelLikes.nextRunAt = '';
+      config.tasks.modelCollections.enabled = false;
+      config.tasks.modelCollections.nextRunAt = '';
     }
     if (taskId === 'comments') {
       task.commentPlan = [];
@@ -1234,6 +1232,7 @@ function buildSchedulePreview(config, runs = []) {
   addSingleScheduleItem(items, config.tasks.modelBoosts, 'modelBoosts', 'Impulsar diseños', runs, countConsumedBoosts);
 
   addSingleScheduleItem(items, config.tasks.modelLikes, 'modelLikes', 'Dar me gusta', runs, countActedDesigns);
+  addSingleScheduleItem(items, config.tasks.modelCollections, 'modelCollections', 'Añadir a la colección', runs, countActedDesigns);
   return applyPreviewAutomationGap(items
     .filter((item) => item.runAt)
     .sort((left, right) => new Date(left.runAt).getTime() - new Date(right.runAt).getTime()));
@@ -1492,8 +1491,10 @@ async function rebuildSchedulesForTimezone(config) {
   const checkin = config.tasks.creality;
   checkin.nextRunAt = checkin.enabled ? scheduleNextRun(checkin) : '';
 
-  const likes = config.tasks.modelLikes;
-  likes.nextRunAt = likes.enabled ? scheduleNextRun(likes) : '';
+  for (const taskId of ['modelLikes', 'modelCollections']) {
+    const task = config.tasks[taskId];
+    task.nextRunAt = task.enabled ? scheduleNextRun(task) : '';
+  }
 
   const boosts = config.tasks.modelBoosts;
   boosts.nextRunAt = boosts.enabled ? scheduleNextRun(boosts) : '';

@@ -18,6 +18,7 @@ import {
 import { isOwnModel, readModelOwnership } from './modelOwnership.js';
 import { collectCatalogCandidates } from './modelDownloadTask.js';
 import { selectFavoriteCandidates } from './favoriteModelIndex.js';
+import { addModelToDefaultCollection, captureCollectionTarget } from './modelCollectionApi.js';
 
 const ACTIONS = {
   like_model: {
@@ -64,6 +65,7 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
     const page = context.pages()[0] || await context.newPage();
     const observer = observeCrealityPage(page, action.taskId);
     let candidate = candidates[0] || null;
+    let collectionTarget = null;
     try {
       const incentiveBefore = await readIncentiveProgress(page, observer, action.incentiveTitle, {
         timezone: taskConfig.timezone,
@@ -101,19 +103,22 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
           const pending = candidates[candidateIndex];
           candidateIndex += 1;
           candidate = pending;
-          await prepareActionPage(page, pending, observer, actionKey);
+          collectionTarget = await prepareActionPage(page, pending, observer, actionKey);
           const ownership = await readModelOwnership(page);
-          const updatedOwnership = await updateDesignOwnership(pending.id, ownership, options.ownUserId);
+          const sessionUserId = collectionTarget?.authenticationHeaders.__cxy_uid_ || options.ownUserId;
+          const updatedOwnership = await updateDesignOwnership(pending.id, ownership, sessionUserId);
           candidate = updatedOwnership || pending;
-          if (isOwnModel(ownership, options.ownUserId)) {
+          if (isOwnModel(ownership, sessionUserId)) {
             ownModelsSkipped += 1;
             continue;
           }
 
-          if (actionKey === 'like_model') {
-            const control = page.locator('.liked.flex-all-center, .liked').first();
+          {
+            const control = page.locator(actionKey === 'like_model'
+              ? '.liked.flex-all-center, .liked' : '.collect.flex-all-center, .collect').first();
             const state = await inspectControlState(control);
-            if (!isLikeControlActive(state)) {
+            const active = actionKey === 'like_model' ? isLikeControlActive(state) : isCollectionControlActive(state);
+            if (!active) {
               actionableCandidateFound = true;
               break;
             }
@@ -127,8 +132,6 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
             alreadyApplied.push({ ...(updated || candidate), rewardVerification: verification });
             continue;
           }
-          actionableCandidateFound = true;
-          break;
         }
 
         if (actionableCandidateFound || catalogLoaded) break;
@@ -144,7 +147,9 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
           });
           if (stored.record
             && !knownIds.has(stored.record.id)
-            && !isOwnModel(stored.record, options.ownUserId)) {
+            && (actionKey === 'add_to_collection'
+              ? chooseCandidates([stored.record], action.completedField, action.actionStateField, options.ownUserId).length
+              : !isOwnModel(stored.record, options.ownUserId))) {
             knownIds.add(stored.record.id);
             candidates.push(stored.record);
           }
@@ -173,7 +178,13 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
       }
 
       await observer.snapshot();
-      const actionEvidence = await performAction(page, actionKey, observer, action.taskId);
+      const actionEvidence = await performAction(page, actionKey, observer, action.taskId, {
+        collectionTarget,
+        beforeCollectionRequest: () => updateDesignAction(candidate.id, actionKey, 'ambiguous', {
+          status: 'unverified', checkedAt: new Date().toISOString()
+        })
+      });
+      collectionTarget = null;
       const network = analyzeActionTrace(actionEvidence.trace, actionKey, actionEvidence.pageDiagnostic);
       const incentiveAfter = network.systemic
         ? { found: false, title: action.incentiveTitle, checkedAt: new Date().toISOString() }
@@ -224,7 +235,7 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
             diagnostics: [diagnostic],
             rewardVerification,
             incident: diagnostic.systemic ? diagnostic : null,
-            retryableToday: !diagnostic.systemic
+            retryableToday: actionKey !== 'add_to_collection' && !diagnostic.systemic
           },
           screenshots
         };
@@ -290,6 +301,7 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
         screenshots
       };
     } finally {
+      collectionTarget = null;
       observer.stop();
     }
   });
@@ -333,18 +345,22 @@ function shuffle(values = [], random = Math.random) {
 }
 
 async function prepareActionPage(page, design, observer, actionKey) {
-  await page.goto(design.url, { waitUntil: 'domcontentloaded' });
-  const selector = actionKey === 'like_model'
-    ? '.liked.flex-all-center, .liked'
-    : '.collect.flex-all-center, .collect';
-  await page.locator(selector).first().waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(500);
+  const collectionContext = actionKey === 'add_to_collection' ? captureCollectionTarget(page) : null;
+  try {
+    await page.goto(design.url, { waitUntil: 'domcontentloaded' });
+    const selector = actionKey === 'like_model'
+      ? '.liked.flex-all-center, .liked'
+      : '.collect.flex-all-center, .collect';
+    await page.locator(selector).first().waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(500);
 
-  const diagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
-  if (diagnostic) throw diagnosticError(diagnostic);
+    const diagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
+    if (diagnostic) throw diagnosticError(diagnostic);
+    return collectionContext ? await collectionContext.read() : null;
+  } finally { collectionContext?.stop(); }
 }
 
-async function performAction(page, actionKey, observer, taskId) {
+async function performAction(page, actionKey, observer, taskId, options = {}) {
   if (actionKey === 'like_model') {
     const control = page.locator('.liked.flex-all-center, .liked').first();
     const before = await inspectControlState(control);
@@ -375,23 +391,25 @@ async function performAction(page, actionKey, observer, taskId) {
   const before = await inspectControlState(control);
   const beforeImage = await captureDiagnosticImage(page);
   const actionMark = observer.mark();
-  let confirmButton = null;
-  let confirmationBefore = null;
+  let confirmation = null;
   try {
-    await clickControl(page, control);
-    await page.waitForTimeout(1200);
-    confirmButton = page.locator('button, [role="button"], .el-button, [class*="btn"], [class*="button"]').filter({
-      hasText: /Confirmar|Confirm|Aceptar/i
-    }).first();
-    if (!(await confirmButton.isVisible().catch(() => false))) {
-      throw taskError('CONFIRM_CONTROL_NOT_FOUND', 'page', 'No se encontró el botón Confirmar.');
+    if (!before.visible || isCollectionControlActive(before)) {
+      throw taskError('COLLECTION_CONTROL_NOT_READY', 'page', 'No se confirmó un modelo pendiente de guardar.');
     }
-    confirmationBefore = await inspectControlState(confirmButton);
-    await confirmButton.click({ timeout: 8000 });
-    await confirmButton.waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});
-    await waitForActionSettlement(page);
+    await options.beforeCollectionRequest();
+    confirmation = {
+      ...await addModelToDefaultCollection(page, options.collectionTarget),
+      modelId: options.collectionTarget.modelId,
+      modelIdSource: options.collectionTarget.source
+    };
+    if (!confirmation.accepted) {
+      throw taskError('COLLECTION_API_REJECTED', 'action', `Creality Cloud no confirmó el guardado (HTTP ${confirmation.http}, código ${confirmation.code ?? 'desconocido'}).`);
+    }
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await control.waitFor({ state: 'visible', timeout: 8000 });
+    await page.waitForTimeout(1500);
   } catch (error) {
-    await attachFailedAction(error, page, observer, actionMark, control, before, confirmationBefore, taskId, beforeImage);
+    await attachFailedAction(error, page, observer, actionMark, control, before, confirmation, taskId, beforeImage);
     throw error;
   }
   const trace = await observer.captureSince(actionMark);
@@ -401,14 +419,18 @@ async function performAction(page, actionKey, observer, taskId) {
   return {
     before,
     after,
-    confirmation: {
-      before: confirmationBefore,
-      hiddenAfterClick: !(await confirmButton.isVisible().catch(() => false))
-    },
+    confirmation: { ...confirmation, saved: isCollectionControlActive(after) },
     trace,
     pageDiagnostic,
     diagnosticImages: [{ image: beforeImage, code: 'before-action' }, { image: afterImage, code: 'after-action' }]
   };
+}
+
+export function isCollectionControlActive(state = {}) {
+  return String(state.ariaPressed).toLowerCase() === 'true'
+    || String(state.ariaChecked).toLowerCase() === 'true'
+    || /(?:^|\s)(?:active|is-active|selected)(?:\s|$)/.test(String(state.className || ''))
+    || /icon-shoucang_mianxing/.test(String(state.html || ''));
 }
 
 export function isLikeControlActive(state = {}) {
