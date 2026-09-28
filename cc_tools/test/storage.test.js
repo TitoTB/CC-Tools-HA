@@ -112,6 +112,25 @@ test('elimina las credenciales internas heredadas de la configuración', async (
   assert.equal(Object.hasOwn(stored, 'auth'), false);
 });
 
+test('retira la programación heredada de colecciones', async () => {
+  const legacy = await storage.readConfig();
+  legacy.tasks.modelCollections = {
+    enabled: true,
+    windowStart: '08:00',
+    windowEnd: '12:00',
+    nextRunAt: '2026-09-29T08:00:00.000Z'
+  };
+  legacy.telegram.notifyOnModelCollection = true;
+  legacy.telegram.notifyOnModelCollectionError = true;
+  await fs.writeFile(path.join(temporaryDataDir, 'config.json'), JSON.stringify(legacy));
+
+  const migrated = await storage.readConfig();
+
+  assert.equal(Object.hasOwn(migrated.tasks, 'modelCollections'), false);
+  assert.equal(Object.hasOwn(migrated.telegram, 'notifyOnModelCollection'), false);
+  assert.equal(Object.hasOwn(migrated.telegram, 'notifyOnModelCollectionError'), false);
+});
+
 test('recupera automáticamente una configuración vacía desde la copia de respaldo', async () => {
   const config = await storage.readConfig();
   config.telegram.enabled = true;

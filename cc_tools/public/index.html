@@ -180,26 +180,6 @@
           </button>
         </article>
 
-        <article class="tool-card" hidden>
-          <div class="tool-card-content">
-            <h2>Añadir a la colección</h2>
-            <p>Añade a tu colección uno de los diseños descargados que todavía esté pendiente.</p>
-            <div class="tool-meta">
-              <span>Última ejecución:</span>
-              <strong id="collections-last-run">-</strong>
-              <span>Próxima ejecución:</span>
-              <strong id="collections-next-run">-</strong>
-            </div>
-          </div>
-          <label class="switch tool-switch" title="Activar colección">
-            <input id="collections-enabled" type="checkbox">
-            <span></span>
-          </label>
-          <span id="collections-daily-badge" class="daily-badge">0/1</span>
-          <button id="open-collections-config" class="corner-config" type="button" title="Configurar colección" aria-label="Configurar colección">
-            <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z"/></svg>
-          </button>
-        </article>
         </div>
       </section>
 
@@ -226,7 +206,6 @@
             <label><span>Desde</span><input id="designs-filter-from" type="date"></label>
             <label><span>Hasta</span><input id="designs-filter-to" type="date"></label>
             <label><span>Me gusta</span><select id="designs-filter-like"><option value="all">Todos</option><option value="yes">Sí</option><option value="no">No</option></select></label>
-            <label><span>Colección</span><select id="designs-filter-collection"><option value="all">Todos</option><option value="yes">Sí</option><option value="no">No</option></select></label>
             <label><span>Comentario</span><select id="designs-filter-comment"><option value="all">Todos</option><option value="yes">Sí</option><option value="no">No</option></select></label>
             <label><span>Autor favorito</span><select id="designs-filter-favorite-author"><option value="all">Todos</option></select></label>
             <div class="designs-filter-actions">
@@ -858,39 +837,6 @@
         <div class="button-row modal-actions checkin-modal-actions">
           <button id="run-likes-now" class="secondary" type="button"><svg viewBox="0 0 512 512" aria-hidden="true"><path d="M241 87.1l15 20.7 15-20.7C296 52.5 336.2 32 378.9 32 452.4 32 512 91.6 512 165.1l0 2.6c0 112.2-139.9 242.5-212.9 298.2-12.4 9.4-27.6 14.1-43.1 14.1s-30.8-4.6-43.1-14.1C139.9 410.2 0 279.9 0 167.7l0-2.6C0 91.6 59.6 32 133.1 32 175.8 32 216 52.5 241 87.1z"/></svg><span>Enviar like</span></button>
           <button id="save-likes-config" type="button"><svg viewBox="0 0 512 512" aria-hidden="true"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM232 120c0-13.3 10.7-24 24-24s24 10.7 24 24V243.2l71.1 47.4c11 7.4 14 22.3 6.7 33.3s-22.3 14-33.3 6.7l-81.8-54.5c-6.7-4.5-10.7-12-10.7-20V120z"/></svg><span>Programar</span></button>
-        </div>
-      </div>
-    </div>
-
-    <div id="collections-config-modal" class="modal" hidden>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="collections-config-title">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Creality Cloud</p>
-            <h2 id="collections-config-title">Configurar colección</h2>
-          </div>
-          <button id="close-collections-config" class="icon-button" type="button" aria-label="Cerrar">×</button>
-        </div>
-        <p class="muted">Configura la ventana temporal para añadir a la colección un diseño descargado pendiente.</p>
-        <div class="form-grid tool-config-grid">
-          <label>
-            <span>Ventana inicio</span>
-            <input id="collections-window-start" type="time" value="08:00">
-          </label>
-          <label>
-            <span>Ventana fin</span>
-            <input id="collections-window-end" type="time" value="12:00">
-          </label>
-        </div>
-        <div class="form-grid single">
-          <label>
-            <span>Diseños por día</span>
-            <input id="collections-daily-limit" type="number" value="1" disabled>
-          </label>
-        </div>
-        <div class="button-row modal-actions">
-          <button id="save-collections-config" type="button">Guardar</button>
-          <button id="run-collections-now" class="secondary" type="button">Ejecutar ahora</button>
         </div>
       </div>
     </div>

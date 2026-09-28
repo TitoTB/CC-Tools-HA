@@ -17,7 +17,7 @@ test('interpreta Retry-After expresado en segundos sin reintentar', () => {
   assert.equal(parseRetryAfterMilliseconds('120', new Date('2026-09-20T10:00:00Z')), 120000);
 });
 
-test('un fallo sistémico de colección no detiene las descargas', () => {
+test('un fallo sistémico aislado no detiene las descargas', () => {
   const config = { automationHealth: { state: 'active' } };
   const result = {
     details: {
@@ -29,11 +29,11 @@ test('un fallo sistémico de colección no detiene las descargas', () => {
     }
   };
 
-  const event = updateAutomationHealth(config, 'modelCollections', 'failed', result);
+  const event = updateAutomationHealth(config, 'modelLikes', 'failed', result);
 
   assert.equal(event.isolatedIncident, true);
   assert.equal(config.automationHealth.state, 'active');
-  assert.equal(config.automationHealth.lastIncidentTaskId, 'modelCollections');
+  assert.equal(config.automationHealth.lastIncidentTaskId, 'modelLikes');
 });
 
 test('solo las incidencias globales confirmadas pueden detener el scheduler', () => {

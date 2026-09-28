@@ -53,7 +53,7 @@ test('una descarga sin recompensa acreditada no cuenta como éxito', () => {
 
 function run(status, finishedAt, code = '') {
   return {
-    taskId: 'modelCollections',
+    taskId: 'modelLikes',
     status,
     finishedAt,
     details: code ? { diagnostics: [{ code }] } : {}

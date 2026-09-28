@@ -133,12 +133,6 @@ const fields = {
   likesWindowStart: $('#likes-window-start'),
   likesWindowEnd: $('#likes-window-end'),
   likesPrioritizeFavorites: $('#likes-prioritize-favorites'),
-  collectionsLastRun: $('#collections-last-run'),
-  collectionsNextRun: $('#collections-next-run'),
-  collectionsEnabled: $('#collections-enabled'),
-  collectionsDailyBadge: $('#collections-daily-badge'),
-  collectionsWindowStart: $('#collections-window-start'),
-  collectionsWindowEnd: $('#collections-window-end'),
   telegramEnabled: $('#telegram-enabled'),
   telegramToken: $('#telegram-token'),
   telegramChat: $('#telegram-chat'),
@@ -188,7 +182,6 @@ const fields = {
   designsFilterFrom: $('#designs-filter-from'),
   designsFilterTo: $('#designs-filter-to'),
   designsFilterLike: $('#designs-filter-like'),
-  designsFilterCollection: $('#designs-filter-collection'),
   designsFilterComment: $('#designs-filter-comment'),
   designsFilterFavoriteAuthor: $('#designs-filter-favorite-author'),
   toolConfigModal: $('#tool-config-modal'),
@@ -198,7 +191,6 @@ const fields = {
   scheduleTaskFilter: $('#schedule-task-filter'),
   scheduleList: $('#schedule-list'),
   likesConfigModal: $('#likes-config-modal'),
-  collectionsConfigModal: $('#collections-config-modal'),
   runProgressModal: $('#run-progress-modal'),
   wizardModal: $('#wizard-modal')
 };
@@ -555,7 +547,6 @@ fields.finishPrintEnabled.addEventListener('change', async () => {
 fields.modelsEnabled.addEventListener('change', async () => {
   if (!fields.modelsEnabled.checked) {
     fields.likesEnabled.checked = false;
-    fields.collectionsEnabled.checked = false;
   }
   if (await saveConfig({ includeModels: true })) {
     toast(fields.modelsEnabled.checked ? 'Descarga de diseños activada.' : 'Descarga de diseños desactivada.');
@@ -570,17 +561,6 @@ fields.likesEnabled.addEventListener('change', async () => {
   }
   if (await saveConfig({ includeLikes: true })) {
     toast(fields.likesEnabled.checked ? 'Me gusta activado.' : 'Me gusta desactivado.');
-  }
-});
-
-fields.collectionsEnabled.addEventListener('change', async () => {
-  if (fields.collectionsEnabled.checked && !fields.modelsEnabled.checked) {
-    fields.collectionsEnabled.checked = false;
-    toast('Activa primero la descarga de diseños.');
-    return;
-  }
-  if (await saveConfig({ includeCollections: true })) {
-    toast(fields.collectionsEnabled.checked ? 'Colección activada.' : 'Colección desactivada.');
   }
 });
 
@@ -716,18 +696,6 @@ fields.likesConfigModal.addEventListener('click', (event) => {
   if (event.target === fields.likesConfigModal) fields.likesConfigModal.hidden = true;
 });
 
-$('#open-collections-config').addEventListener('click', () => {
-  fields.collectionsConfigModal.hidden = false;
-});
-
-$('#close-collections-config').addEventListener('click', () => {
-  fields.collectionsConfigModal.hidden = true;
-});
-
-fields.collectionsConfigModal.addEventListener('click', (event) => {
-  if (event.target === fields.collectionsConfigModal) fields.collectionsConfigModal.hidden = true;
-});
-
 $('#save-config').addEventListener('click', async () => {
   if (await programTool(fields.crealityEnabled, () => saveConfig({ includeCreality: true }))) {
     toast('Configuración guardada.');
@@ -744,10 +712,6 @@ $('#save-likes-config').addEventListener('click', async () => {
   if (await programTool(fields.likesEnabled, () => saveConfig({ includeLikes: true }))) {
     toast('Configuración guardada.');
   }
-});
-
-$('#save-collections-config').addEventListener('click', async () => {
-  if (await saveConfig({ includeCollections: true })) toast('Configuración guardada.');
 });
 
 $('#save-telegram').addEventListener('click', async () => {
@@ -776,7 +740,6 @@ for (const field of [...notificationSuccessFields(), ...notificationErrorFields(
 $('#run-now').addEventListener('click', runCheckinWithProgress);
 $('#run-models-now').addEventListener('click', runModelsWithProgress);
 $('#run-likes-now').addEventListener('click', runLikesWithProgress);
-$('#run-collections-now').addEventListener('click', runCollectionsWithProgress);
 
 $('#close-run-progress').addEventListener('click', () => {
   fields.runProgressModal.hidden = true;
@@ -943,9 +906,9 @@ fields.designsTableBody.addEventListener('click', async (event) => {
   if (actionButton) {
     const design = state.designs.items.find((item) => item.id === actionButton.dataset.designId);
     const action = actionButton.dataset.designAction;
-    if (!design || !['like', 'collection'].includes(action)) return;
+    if (!design || action !== 'like') return;
 
-    const completedField = action === 'like' ? 'likeCompleted' : 'collectionCompleted';
+    const completedField = 'likeCompleted';
     actionButton.disabled = true;
     const result = await api(
       `/api/designs/${encodeURIComponent(design.id)}/actions/${action}`,
@@ -1107,20 +1070,6 @@ async function saveConfig(options = {}) {
       windowStart: fields.likesWindowStart.value,
       windowEnd: fields.likesWindowEnd.value,
       prioritizeFavorites: fields.likesPrioritizeFavorites.checked
-    };
-  }
-
-  if (options.includeCollections) {
-    if (fields.collectionsEnabled.checked && !fields.modelsEnabled.checked) {
-      fields.collectionsEnabled.checked = false;
-      toast('Activa primero la descarga de diseños.');
-      render();
-      return false;
-    }
-    body.modelCollections = {
-      enabled: fields.collectionsEnabled.checked,
-      windowStart: fields.collectionsWindowStart.value,
-      windowEnd: fields.collectionsWindowEnd.value
     };
   }
 
@@ -2007,7 +1956,7 @@ async function loadDesigns(page = state.designs.page) {
 }
 
 function emptyDesignFilters() {
-  return { from: '', to: '', like: 'all', collection: 'all', comment: 'all', favoriteAuthor: 'all' };
+  return { from: '', to: '', like: 'all', comment: 'all', favoriteAuthor: 'all' };
 }
 
 function readDesignFilters() {
@@ -2015,7 +1964,6 @@ function readDesignFilters() {
     from: fields.designsFilterFrom.value,
     to: fields.designsFilterTo.value,
     like: fields.designsFilterLike.value,
-    collection: fields.designsFilterCollection.value,
     comment: fields.designsFilterComment.value,
     favoriteAuthor: fields.designsFilterFavoriteAuthor.value
   };
@@ -2025,7 +1973,6 @@ function setDesignFilterFields(filters) {
   fields.designsFilterFrom.value = filters.from || '';
   fields.designsFilterTo.value = filters.to || '';
   fields.designsFilterLike.value = filters.like || 'all';
-  fields.designsFilterCollection.value = filters.collection || 'all';
   fields.designsFilterComment.value = filters.comment || 'all';
   fields.designsFilterFavoriteAuthor.value = filters.favoriteAuthor || 'all';
 }
@@ -2033,7 +1980,6 @@ function setDesignFilterFields(filters) {
 function designFiltersAreActive(filters = state.designs.filters) {
   return Boolean(filters?.from || filters?.to
     || filters?.like !== 'all'
-    || filters?.collection !== 'all'
     || filters?.comment !== 'all'
     || filters?.favoriteAuthor !== 'all');
 }
@@ -2207,18 +2153,6 @@ async function runLikesWithProgress() {
   }
 }
 
-async function runCollectionsWithProgress() {
-  fields.collectionsConfigModal.hidden = true;
-  await runWithProgress({
-    title: 'Añadir a la colección',
-    steps: ['Abriendo el diseño...', 'Añadiendo a la colección', 'Resultado'],
-    activeMessage: 'Buscando un diseño pendiente y añadiéndolo a la colección...',
-    endpoint: '/api/tasks/model-collections/run',
-    body: { test: true },
-    after: async () => loadDesigns(state.designs.page)
-  });
-}
-
 async function runWithProgress({ title, steps, activeMessage, endpoint, body, after }) {
   fields.runProgressModal.hidden = false;
   $('#run-progress-title').textContent = title;
@@ -2330,7 +2264,6 @@ function render() {
   const comments = state.config.tasks.comments;
   const boosts = state.config.tasks.modelBoosts;
   const likes = state.config.tasks.modelLikes;
-  const collections = state.config.tasks.modelCollections;
   renderPointsCounter(state.config.points || {});
   renderShopGoal(state.config.shopGoal || {});
   renderShopOrders(state.config.shopOrders || {});
@@ -2383,10 +2316,6 @@ function render() {
   fields.likesWindowEnd.value = likes.windowEnd;
   fields.likesPrioritizeFavorites.checked = likes.prioritizeFavorites !== false;
   $('#run-likes-now').disabled = state.scheduler?.running === true;
-  renderLastExecution(fields.collectionsLastRun, collections);
-  fields.collectionsEnabled.checked = collections.enabled;
-  fields.collectionsWindowStart.value = collections.windowStart;
-  fields.collectionsWindowEnd.value = collections.windowEnd;
   renderDailyCounters();
   renderNextExecutions();
 
@@ -2425,7 +2354,6 @@ function renderNextExecutions() {
   fields.commentsNextRun.textContent = formatDate(next.comments);
   fields.boostsNextRun.textContent = formatDate(next.modelBoosts);
   fields.likesNextRun.textContent = formatDate(next.modelLikes);
-  fields.collectionsNextRun.textContent = formatDate(next.modelCollections);
 }
 
 function renderLastExecution(node, task = {}) {
@@ -3053,7 +2981,6 @@ function renderDailyCounters() {
   renderDailyBadge(fields.commentsDailyBadge, state.dailyCounters.comments, tasks.comments.dailyLimit || 0);
   renderDailyBadge(fields.boostsDailyBadge, state.dailyCounters.modelBoosts, tasks.modelBoosts.availableBoosts || 0);
   renderDailyBadge(fields.likesDailyBadge, state.dailyCounters.modelLikes, tasks.modelLikes.dailyLimit || 1);
-  renderDailyBadge(fields.collectionsDailyBadge, state.dailyCounters.modelCollections, tasks.modelCollections.dailyLimit || 1);
 }
 
 function renderDailyBadge(node, count, max) {

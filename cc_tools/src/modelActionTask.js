@@ -29,16 +29,6 @@ const ACTIONS = {
     telegramSuccess: '✅ CC Tools: Me gusta completado',
     telegramError: '❌ CC Tools: Me gusta fallido',
     progress: 'Pulsando el botón de me gusta...'
-  },
-  add_to_collection: {
-    taskId: 'modelCollections',
-    label: 'Añadir a la colección',
-    completedField: 'collectionCompleted',
-    actionStateField: 'collectionActionState',
-    incentiveTitle: 'Collection Models',
-    telegramSuccess: '✅ CC Tools: Diseño añadido a la colección',
-    telegramError: '❌ CC Tools: Colección fallida',
-    progress: 'Añadiendo el diseño a la colección...'
   }
 };
 
@@ -52,7 +42,8 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
     action.completedField,
     action.actionStateField,
     options.ownUserId,
-    taskConfig.prioritizeFavorites !== false
+    taskConfig.prioritizeFavorites !== false,
+    Math.random
   );
 
   const failures = [];
@@ -101,7 +92,7 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
           const pending = candidates[candidateIndex];
           candidateIndex += 1;
           candidate = pending;
-          await prepareActionPage(page, pending, observer, actionKey);
+          await prepareActionPage(page, pending, observer);
           const ownership = await readModelOwnership(page);
           const updatedOwnership = await updateDesignOwnership(pending.id, ownership, options.ownUserId);
           candidate = updatedOwnership || pending;
@@ -110,25 +101,22 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
             continue;
           }
 
-          if (actionKey === 'like_model') {
-            const control = page.locator('.liked.flex-all-center, .liked').first();
-            const state = await inspectControlState(control);
-            if (!isLikeControlActive(state)) {
-              actionableCandidateFound = true;
-              break;
-            }
-
-            const verification = {
-              status: 'already_applied',
-              checkedAt: new Date().toISOString(),
-              actionEvidence: { before: state, after: state, confirmation: null }
-            };
-            const updated = await updateDesignAction(candidate.id, actionKey, 'already_applied', verification);
-            alreadyApplied.push({ ...(updated || candidate), rewardVerification: verification });
-            continue;
+          const control = page.locator('.liked.flex-all-center, .liked').first();
+          const state = await inspectControlState(control);
+          const active = isLikeControlActive(state);
+          if (!active) {
+            actionableCandidateFound = true;
+            break;
           }
-          actionableCandidateFound = true;
-          break;
+
+          const verification = {
+            status: 'already_applied',
+            checkedAt: new Date().toISOString(),
+            actionEvidence: { before: state, after: state, confirmation: null }
+          };
+          const updated = await updateDesignAction(candidate.id, actionKey, 'already_applied', verification);
+          alreadyApplied.push({ ...(updated || candidate), rewardVerification: verification });
+          continue;
         }
 
         if (actionableCandidateFound || catalogLoaded) break;
@@ -173,7 +161,7 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
       }
 
       await observer.snapshot();
-      const actionEvidence = await performAction(page, actionKey, observer, action.taskId);
+      const actionEvidence = await performAction(page, observer, action.taskId);
       const network = analyzeActionTrace(actionEvidence.trace, actionKey, actionEvidence.pageDiagnostic);
       const incentiveAfter = network.systemic
         ? { found: false, title: action.incentiveTitle, checkedAt: new Date().toISOString() }
@@ -307,12 +295,14 @@ export function chooseCandidates(
   prioritizeFavorites = true,
   random = Math.random
 ) {
+  const blockedStates = new Set(['applied_uncredited', 'credited', 'already_applied']);
+  blockedStates.add('ambiguous');
   const eligible = designs
     .filter((design) => design.url
       && !design[completedField]
       && !isOwnModel(design, ownUserId)
       && !(design.indexedOnly === true && design.source === 'favorite' && design.favoriteActive !== true)
-      && !['applied_uncredited', 'ambiguous', 'credited', 'already_applied'].includes(design[actionStateField]))
+      && !blockedStates.has(design[actionStateField]))
   const eligibleIds = new Set(eligible.map((design) => design.id));
   const favorites = selectFavoriteCandidates(designs, completedField, ownUserId)
     .filter((design) => eligibleIds.has(design.id));
@@ -332,66 +322,26 @@ function shuffle(values = [], random = Math.random) {
   return output;
 }
 
-async function prepareActionPage(page, design, observer, actionKey) {
+async function prepareActionPage(page, design, observer) {
   await page.goto(design.url, { waitUntil: 'domcontentloaded' });
-  const selector = actionKey === 'like_model'
-    ? '.liked.flex-all-center, .liked'
-    : '.collect.flex-all-center, .collect';
-  await page.locator(selector).first().waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
+  await page.locator('.liked.flex-all-center, .liked').first()
+    .waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(500);
 
   const diagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
   if (diagnostic) throw diagnosticError(diagnostic);
 }
 
-async function performAction(page, actionKey, observer, taskId) {
-  if (actionKey === 'like_model') {
-    const control = page.locator('.liked.flex-all-center, .liked').first();
-    const before = await inspectControlState(control);
-    const beforeImage = await captureDiagnosticImage(page);
-    const actionMark = observer.mark();
-    try {
-      await clickControl(page, control);
-      await waitForActionSettlement(page);
-    } catch (error) {
-      await attachFailedAction(error, page, observer, actionMark, control, before, null, taskId, beforeImage);
-      throw error;
-    }
-    const trace = await observer.captureSince(actionMark);
-    const after = await inspectControlState(control);
-    const afterImage = await captureDiagnosticImage(page);
-    const pageDiagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
-    return {
-      before,
-      after,
-      confirmation: null,
-      trace,
-      pageDiagnostic,
-      diagnosticImages: [{ image: beforeImage, code: 'before-action' }, { image: afterImage, code: 'after-action' }]
-    };
-  }
-
-  const control = page.locator('.collect.flex-all-center, .collect').first();
+async function performAction(page, observer, taskId) {
+  const control = page.locator('.liked.flex-all-center, .liked').first();
   const before = await inspectControlState(control);
   const beforeImage = await captureDiagnosticImage(page);
   const actionMark = observer.mark();
-  let confirmButton = null;
-  let confirmationBefore = null;
   try {
     await clickControl(page, control);
-    await page.waitForTimeout(1200);
-    confirmButton = page.locator('button, [role="button"], .el-button, [class*="btn"], [class*="button"]').filter({
-      hasText: /Confirmar|Confirm|Aceptar/i
-    }).first();
-    if (!(await confirmButton.isVisible().catch(() => false))) {
-      throw taskError('CONFIRM_CONTROL_NOT_FOUND', 'page', 'No se encontró el botón Confirmar.');
-    }
-    confirmationBefore = await inspectControlState(confirmButton);
-    await confirmButton.click({ timeout: 8000 });
-    await confirmButton.waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});
     await waitForActionSettlement(page);
   } catch (error) {
-    await attachFailedAction(error, page, observer, actionMark, control, before, confirmationBefore, taskId, beforeImage);
+    await attachFailedAction(error, page, observer, actionMark, control, before, null, taskId, beforeImage);
     throw error;
   }
   const trace = await observer.captureSince(actionMark);
@@ -401,10 +351,7 @@ async function performAction(page, actionKey, observer, taskId) {
   return {
     before,
     after,
-    confirmation: {
-      before: confirmationBefore,
-      hiddenAfterClick: !(await confirmButton.isVisible().catch(() => false))
-    },
+    confirmation: null,
     trace,
     pageDiagnostic,
     diagnosticImages: [{ image: beforeImage, code: 'before-action' }, { image: afterImage, code: 'after-action' }]

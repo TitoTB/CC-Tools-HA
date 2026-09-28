@@ -1,12 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseCandidates, compareIncentiveProgress, isLikeControlActive } from '../src/modelActionTask.js';
+import {
+  chooseCandidates,
+  compareIncentiveProgress,
+  isLikeControlActive
+} from '../src/modelActionTask.js';
 import {
   analyzeActionResponses,
   analyzeActionTrace,
   findIncentiveTaskRecord,
   incentivePageNotReadyError,
-  normalizeTaskTitle
+  normalizeTaskTitle,
+  progressFromIncentiveTaskRecord,
+  readIncentiveProgress
 } from '../src/incentiveTasks.js';
 
 test('identifica un punto acreditado después de realizar la acción', () => {
@@ -220,6 +226,80 @@ test('recupera el taskId oficial de Collection Models en respuestas anidadas', (
   }, 'Collection Models');
 
   assert.equal(match.taskId, 'collection-task-123');
+});
+
+test('lee el progreso de Collection Models desde la respuesta estructurada', () => {
+  const progress = progressFromIncentiveTaskRecord({
+    taskId: 'collection-task-123',
+    taskName: 'Collection Models',
+    doneTimes: 0,
+    vaildTimes: 1
+  }, 'Collection Models', { source: 'task-response' });
+
+  assert.equal(progress.found, true);
+  assert.equal(progress.taskId, 'collection-task-123');
+  assert.equal(progress.done, 0);
+  assert.equal(progress.valid, 1);
+  assert.equal(progress.completed, false);
+  assert.equal(progress.taskResolution, 'task-response');
+});
+
+test('acepta una tarea estructurada ya completada', () => {
+  const progress = progressFromIncentiveTaskRecord({
+    taskName: 'Collection Models',
+    doneTimes: '1',
+    validTimes: '1'
+  }, 'Collection Models');
+
+  assert.equal(progress.completed, true);
+});
+
+test('usa la API de tareas aunque Creality redirija la página de incentivos a la portada', async () => {
+  const locator = (selector) => ({
+    innerText: async () => selector === 'body'
+      ? 'Creality Cloud home page with enough content to be considered fully loaded.'
+      : '',
+    first: () => ({
+      isVisible: async () => false,
+      waitFor: async () => {}
+    })
+  });
+  const page = {
+    goto: async () => {},
+    url: () => 'https://www.crealitycloud.com/es',
+    title: async () => 'Creality Cloud',
+    frames: () => [],
+    locator,
+    waitForTimeout: async () => {},
+    on: () => {},
+    off: () => {},
+    evaluate: async () => ({
+      ok: true,
+      status: 200,
+      body: {
+        code: 0,
+        result: {
+          list: [{
+            taskId: 'collection-task-123',
+            taskName: 'Collection Models',
+            doneTimes: 0,
+            vaildTimes: 1
+          }]
+        }
+      }
+    })
+  };
+  const observer = { snapshot: async () => [] };
+
+  const progress = await readIncentiveProgress(page, observer, 'Collection Models', {
+    includePoints: false,
+    requireTaskList: true
+  });
+
+  assert.equal(progress.found, true);
+  assert.equal(progress.done, 0);
+  assert.equal(progress.valid, 1);
+  assert.equal(progress.taskResolution, 'task-response');
 });
 
 test('no confunde otra tarea diaria con Collection Models', () => {

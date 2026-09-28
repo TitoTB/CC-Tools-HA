@@ -4,6 +4,7 @@ import { canonicalModelUrl, modelKeyFromUrl, modelSlugFromUrl, sameModelIdentity
 import { DEFAULT_FAVORITE_PROFILE, normalizeFavoriteProfiles } from './favoriteProfiles.js';
 import { activateFinishPrintProfile, normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
 import { normalizeShopOrdersState } from './shopOrdersState.js';
+import { mergePointTransactions } from './pointsCounter.js';
 
 const DATA_DIR = process.env.CCTOOLS_DATA_DIR || path.resolve('data');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
@@ -73,8 +74,6 @@ const DEFAULT_CONFIG = {
     notifyOnModelLikeError: true,
     notifyOnFinishPrint: true,
     notifyOnFinishPrintError: true,
-    notifyOnModelCollection: true,
-    notifyOnModelCollectionError: true,
     notifyOnComment: true,
     notifyOnCommentError: true,
     notifyOnModelBoost: true,
@@ -155,17 +154,6 @@ const DEFAULT_CONFIG = {
       windowEnd: '12:00',
       timezone: 'Europe/Madrid',
       prioritizeFavorites: true,
-      dailyLimit: 1,
-      nextRunAt: '',
-      lastRunAt: '',
-      lastStatus: 'never',
-      lastMessage: ''
-    },
-    modelCollections: {
-      enabled: false,
-      windowStart: '08:00',
-      windowEnd: '12:00',
-      timezone: 'Europe/Madrid',
       dailyLimit: 1,
       nextRunAt: '',
       lastRunAt: '',
@@ -843,6 +831,9 @@ export async function setDesignActionCompleted(designId, actionKey, completed) {
 function normalizeStoredConfig(stored) {
   const config = mergeConfig(DEFAULT_CONFIG, stored);
   delete config.auth;
+  delete config.tasks.modelCollections;
+  delete config.telegram.notifyOnModelCollection;
+  delete config.telegram.notifyOnModelCollectionError;
   const storedDownloadTask = config.tasks.modelDownloads;
   config.tasks.modelDownloads = Object.fromEntries(
     Object.keys(DEFAULT_CONFIG.tasks.modelDownloads).map((key) => [key, storedDownloadTask[key]])
@@ -850,6 +841,7 @@ function normalizeStoredConfig(stored) {
   config.crealityFavorites = normalizeFavoriteProfiles(config.crealityFavorites);
   config.shopGoal = normalizeStoredShopGoal(config.shopGoal);
   config.shopOrders = normalizeShopOrdersState(config.shopOrders);
+  config.points.transactions = mergePointTransactions(config.points.transactions, []);
   config.tasks.finishPrint.printerProfiles = normalizeFinishPrintProfiles(config.tasks.finishPrint);
   activateFinishPrintProfile(
     config.tasks.finishPrint,

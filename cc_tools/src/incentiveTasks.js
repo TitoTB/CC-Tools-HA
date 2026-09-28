@@ -7,14 +7,16 @@ const TASK_RESPONSE_URL = 'https://www.crealitycloud.com/api/cxy/v2/task/taskRes
 
 export async function readIncentiveProgress(page, observer, title, options = {}) {
   const taskContext = captureTaskContext(page);
+  let navigationError = null;
   try {
     await navigateToCrealityPage(page, INCENTIVE_POINTS_URL);
     await page.waitForTimeout(3000);
   } catch (error) {
     if (isNavigationTimeout(error) || error.code === 'NAVIGATION_TARGET_MISMATCH') {
-      throw incentivePageNotReadyError(error.message);
+      navigationError = incentivePageNotReadyError(error.message);
+    } else {
+      throw error;
     }
-    throw error;
   } finally {
     await taskContext.stop();
   }
@@ -24,6 +26,15 @@ export async function readIncentiveProgress(page, observer, title, options = {})
 
   const bodyText = await page.locator('body').innerText().catch(() => '');
   const fallbackTotal = parsePointsTotal(bodyText);
+
+  const resolvedTask = await resolveIncentiveTask(page, title, taskContext);
+  const apiProgress = progressFromIncentiveTaskRecord(resolvedTask.record, title, resolvedTask);
+  if (apiProgress) {
+    apiProgress.availableTasks = [];
+    return attachPointsSummary(page, apiProgress, options, fallbackTotal);
+  }
+
+  if (navigationError) throw navigationError;
 
   await page.locator('.task-item-title').first().waitFor({ state: 'attached', timeout: 12000 }).catch(() => {});
   const lookup = await findTaskItemWithRetry(page, title);
@@ -49,7 +60,6 @@ export async function readIncentiveProgress(page, observer, title, options = {})
 
   const done = toCount(await lookup.item.locator('.done-times').textContent().catch(() => ''));
   const valid = toCount(await lookup.item.locator('.vaild-times').textContent().catch(() => ''));
-  const resolvedTask = await resolveIncentiveTask(page, title, taskContext);
   const progress = {
     found: Number.isFinite(done) && Number.isFinite(valid),
     title: lookup.title,
@@ -259,10 +269,27 @@ export function findIncentiveTaskRecord(value, expectedTitle) {
   return null;
 }
 
+export function progressFromIncentiveTaskRecord(record, expectedTitle, resolution = {}) {
+  if (!record || typeof record !== 'object') return null;
+  const done = firstTaskCount(record, ['doneTimes', 'doneTime', 'completedTimes', 'finishTimes', 'currentTimes', 'currentCount']);
+  const valid = firstTaskCount(record, ['vaildTimes', 'validTimes', 'targetTimes', 'totalTimes', 'maxTimes', 'limitTimes']);
+  if (!Number.isFinite(done) || !Number.isFinite(valid)) return null;
+  return {
+    found: true,
+    title: normalize(record.taskName || record.title || record.name || record.taskTitle || expectedTitle),
+    taskId: String(record.taskId || record.id || resolution.taskId || '').trim(),
+    taskResolution: resolution.source || 'task-response',
+    done,
+    valid,
+    completed: valid > 0 && done >= valid,
+    checkedAt: new Date().toISOString()
+  };
+}
+
 async function resolveIncentiveTask(page, title, taskContext) {
   for (const payload of taskContext.payloads) {
     const match = findIncentiveTaskRecord(payload, title);
-    if (match) return { taskId: match.taskId, source: 'incentive-page' };
+    if (match) return { taskId: match.taskId, record: match.record, source: 'incentive-page' };
   }
 
   const response = await postFromPage(page, TASK_RESPONSE_URL, {
@@ -271,8 +298,8 @@ async function resolveIncentiveTask(page, title, taskContext) {
     rewardType: 1
   }, taskContext.headers).catch(() => null);
   const match = findIncentiveTaskRecord(response?.body, title);
-  if (match) return { taskId: match.taskId, source: 'task-response' };
-  return { taskId: '', source: response ? 'task-response-no-match' : 'unavailable' };
+  if (match) return { taskId: match.taskId, record: match.record, source: 'task-response' };
+  return { taskId: '', record: null, source: response ? 'task-response-no-match' : 'unavailable' };
 }
 
 function captureTaskContext(page) {
@@ -421,8 +448,17 @@ function isExpectedDownloadNavigationAbort(entry, actionKey) {
 }
 
 function toCount(value) {
-  const parsed = Number.parseInt(String(value || '').replace(/[^0-9-]/g, ''), 10);
+  const parsed = Number.parseInt(String(value ?? '').replace(/[^0-9-]/g, ''), 10);
   return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function firstTaskCount(record, names) {
+  for (const name of names) {
+    if (!(name in record)) continue;
+    const count = toCount(record[name]);
+    if (Number.isFinite(count)) return count;
+  }
+  return Number.NaN;
 }
 
 function normalize(value) {

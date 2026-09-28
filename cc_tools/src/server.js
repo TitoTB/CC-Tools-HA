@@ -723,8 +723,6 @@ app.patch('/api/config', async (req, res) => {
     if (!config.tasks.modelDownloads.enabled) {
       config.tasks.modelLikes.enabled = false;
       config.tasks.modelLikes.nextRunAt = '';
-      config.tasks.modelCollections.enabled = false;
-      config.tasks.modelCollections.nextRunAt = '';
     }
     if (config.tasks.modelDownloads.enabled) {
       const plan = generateDownloadPlan(config.tasks.modelDownloads, new Date());
@@ -750,9 +748,6 @@ app.patch('/api/config', async (req, res) => {
     config.tasks[taskId].dailyLimit = 1;
     config.tasks[taskId].nextRunAt = config.tasks[taskId].enabled ? scheduleNextRun(config.tasks[taskId]) : '';
   }
-
-  config.tasks.modelCollections.enabled = false;
-  config.tasks.modelCollections.nextRunAt = '';
 
   if (input.setup) {
     setupCompletedNow = config.setup.assistantCompleted !== true
@@ -814,10 +809,6 @@ app.post('/api/tasks/model-likes/run', async (req, res) => {
   }
 });
 
-app.post('/api/tasks/model-collections/run', async (req, res) => {
-  res.status(410).json({ ok: false, error: 'TOOL_HIDDEN' });
-});
-
 app.get('/api/designs', async (req, res) => {
   const page = clamp(Number(req.query.page), 1, Number.MAX_SAFE_INTEGER, 1);
   const pageSize = 20;
@@ -867,15 +858,12 @@ app.get('/api/tasks/model-downloads/categories', (_req, res) => {
 });
 
 app.patch('/api/designs/:id/actions/:action', async (req, res) => {
-  const actionKey = ({
-    like: 'like_model',
-    collection: 'add_to_collection'
-  })[String(req.params.action || '')];
+  const actionKey = ({ like: 'like_model' })[String(req.params.action || '')];
   if (!actionKey) return res.status(400).json({ ok: false, error: 'DESIGN_ACTION_INVALID' });
 
   const startedAt = new Date().toISOString();
-  const taskId = actionKey === 'like_model' ? 'modelLikes' : 'modelCollections';
-  const actionLabel = actionKey === 'like_model' ? 'Dar me gusta' : 'Añadir a la colección';
+  const taskId = 'modelLikes';
+  const actionLabel = 'Dar me gusta';
   const designId = String(req.params.id || '');
   const completed = Boolean(req.body?.completed);
   let currentDesign = null;
@@ -1031,11 +1019,6 @@ app.use('/novnc', createProxyMiddleware({
 app.use('/', express.static(publicDir, { index: 'index.html' }));
 
 const startupConfig = await readConfig();
-if (startupConfig.tasks.modelCollections.enabled || startupConfig.tasks.modelCollections.nextRunAt) {
-  startupConfig.tasks.modelCollections.enabled = false;
-  startupConfig.tasks.modelCollections.nextRunAt = '';
-  await writeConfig(startupConfig);
-}
 await reconcileDownloadRewardHistory();
 await reconcileDownloadedDesignHistory();
 await reconcileDesignActionHistory();
@@ -1164,8 +1147,7 @@ function buildDailyCounters(config, runs) {
     modelDownloads: countTodayRuns(runs, 'modelDownloads', config.tasks.modelDownloads, countDownloadedDesigns),
     comments: countTodayRuns(runs, 'comments', config.tasks.comments, countCreditedComments),
     modelBoosts: countTodayRuns(runs, 'modelBoosts', config.tasks.modelBoosts, countConsumedBoosts),
-    modelLikes: countTodayRuns(runs, 'modelLikes', config.tasks.modelLikes, countActedDesigns),
-    modelCollections: countTodayRuns(runs, 'modelCollections', config.tasks.modelCollections, countActedDesigns)
+    modelLikes: countTodayRuns(runs, 'modelLikes', config.tasks.modelLikes, countActedDesigns)
   };
 }
 
@@ -1492,8 +1474,10 @@ async function rebuildSchedulesForTimezone(config) {
   const checkin = config.tasks.creality;
   checkin.nextRunAt = checkin.enabled ? scheduleNextRun(checkin) : '';
 
-  const likes = config.tasks.modelLikes;
-  likes.nextRunAt = likes.enabled ? scheduleNextRun(likes) : '';
+  for (const taskId of ['modelLikes']) {
+    const task = config.tasks[taskId];
+    task.nextRunAt = task.enabled ? scheduleNextRun(task) : '';
+  }
 
   const boosts = config.tasks.modelBoosts;
   boosts.nextRunAt = boosts.enabled ? scheduleNextRun(boosts) : '';

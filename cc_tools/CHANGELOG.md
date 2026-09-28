@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.12
+
+- Corrige las conversiones de puntos Spotlight en el historial sin mezclar el encabezado y los filtros de Creality Cloud.
+- Repara automáticamente los nombres defectuosos que ya estuvieran guardados en el historial.
+- Retira la herramienta experimental Completa tu colección y su configuración asociada.
+
 ## 1.0.11
 
 - Mantiene actualizada la disponibilidad de boletos boost y mejora sus reintentos.

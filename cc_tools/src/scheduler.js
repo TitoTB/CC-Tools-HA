@@ -27,7 +27,14 @@ import {
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
 
-const TASK_IDS = ['creality', 'finishPrint', 'modelDownloads', 'comments', 'modelBoosts', 'modelLikes'];
+const TASK_IDS = [
+  'creality',
+  'finishPrint',
+  'modelDownloads',
+  'comments',
+  'modelBoosts',
+  'modelLikes'
+];
 const MIN_AUTOMATION_GAP_MINUTES = 10;
 const SILENT_RETRY_MINUTES = 10;
 
@@ -745,7 +752,7 @@ function executeTask(taskId, taskConfig, options, config) {
   if (taskId === 'comments') return runModelComment(taskConfig, ownershipOptions);
   if (taskId === 'modelBoosts') return runModelBoost({ ...taskConfig, ownUserId: ownershipOptions.ownUserId });
   if (taskId === 'modelLikes') return runModelAction('like_model', taskConfig, ownershipOptions);
-  return runModelAction('add_to_collection', taskConfig, ownershipOptions);
+  throw new Error(`Tarea desconocida: ${taskId}`);
 }
 
 function updatePointsCounter(config, result) {
@@ -761,9 +768,6 @@ function formatRunMessage(taskId, status, result) {
   }
   if (taskId === 'modelLikes') {
     return result.message || (status === 'success' ? 'Me gusta completado.' : 'Me gusta fallido.');
-  }
-  if (taskId === 'modelCollections') {
-    return result.message || (status === 'success' ? 'Añadido a la colección.' : 'Colección fallida.');
   }
   if (taskId === 'comments') {
     return result.message || (status === 'success' ? 'Comentario publicado.' : 'Comentario fallido.');
@@ -877,17 +881,13 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
     return;
   }
 
-  if (taskId === 'modelLikes' || taskId === 'modelCollections') {
-    const info = actionInfo(taskId === 'modelLikes' ? 'like_model' : 'add_to_collection');
+  if (taskId === 'modelLikes') {
+    const info = actionInfo('like_model');
     const acted = result.details?.acted || [];
     const failures = result.details?.failures || [];
 
-    const notifySuccess = taskId === 'modelLikes'
-      ? config.telegram.notifyOnModelLike !== false
-      : config.telegram.notifyOnModelCollection !== false;
-    const notifyError = taskId === 'modelLikes'
-      ? config.telegram.notifyOnModelLikeError !== false
-      : config.telegram.notifyOnModelCollectionError !== false;
+    const notifySuccess = config.telegram.notifyOnModelLike !== false;
+    const notifyError = config.telegram.notifyOnModelLikeError !== false;
 
     if (notifySuccess) {
       for (const design of acted) {
@@ -938,7 +938,7 @@ function updateDependentModelActions(config, taskId, result) {
   const downloaded = result.details?.downloaded?.length || 0;
   if (downloaded <= 0) return;
 
-  for (const dependentTaskId of ['modelLikes', 'modelCollections']) {
+  for (const dependentTaskId of ['modelLikes']) {
     const task = config.tasks[dependentTaskId];
     if (!task?.enabled) continue;
     task.nextRunAt = scheduleNextRun(task, new Date());
@@ -1124,7 +1124,7 @@ function shouldNotifyIncident(config, taskId) {
   if (taskId === 'finishPrint') return config.telegram.notifyOnFinishPrintError !== false;
   if (taskId === 'comments') return config.telegram.notifyOnCommentError !== false;
   if (taskId === 'modelBoosts') return config.telegram.notifyOnModelBoostError !== false;
-  return config.telegram.notifyOnModelCollectionError !== false;
+  return false;
 }
 
 function publicError(failure = {}) {

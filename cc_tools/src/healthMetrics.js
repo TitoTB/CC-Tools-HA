@@ -4,8 +4,7 @@ const TRACKED_TASKS = new Set([
   'modelDownloads',
   'comments',
   'modelBoosts',
-  'modelLikes',
-  'modelCollections'
+  'modelLikes'
 ]);
 
 export function buildHealthMetrics(config, runs = [], now = new Date()) {
