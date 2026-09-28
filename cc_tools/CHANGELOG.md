@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.11
+
+- Mantiene actualizada la disponibilidad de boletos boost y mejora sus reintentos.
+- Refuerza la verificación de recompensas de comentarios y descargas.
+- Tolera navegaciones lentas de Creality Cloud sin duplicar errores de descarga.
+- Añade el enlace al histórico de pedidos y expone el último pedido a la integración de Home Assistant.
+
 ## 1.0.10
 
 - Evita que Home Assistant reutilice respuestas antiguas del estado y de los registros.

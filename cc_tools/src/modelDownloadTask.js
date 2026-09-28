@@ -15,6 +15,7 @@ import {
 } from './storage.js';
 import { canonicalModelUrl, modelKeyFromUrl, modelSlugFromUrl } from './modelIdentity.js';
 import { restartAutomationBrowser, withAutomationBrowser } from './browserManager.js';
+import { navigateToCrealityPage } from './crealityNavigation.js';
 import {
   captureDiagnosticImage,
   captureDiagnosticScreenshot,
@@ -541,7 +542,7 @@ export function selectPriorityDownloadCandidates(designs = [], prioritizeFavorit
 }
 
 async function downloadModel(page, candidate, batchDir, observer, ownUserId = '') {
-  await page.goto(candidate.url, { waitUntil: 'domcontentloaded' });
+  await navigateToCrealityPage(page, candidate.url);
   await page.waitForTimeout(3500);
 
   const diagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
