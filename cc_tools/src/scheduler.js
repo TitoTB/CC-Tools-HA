@@ -27,7 +27,7 @@ import {
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
 
-const TASK_IDS = ['creality', 'finishPrint', 'modelDownloads', 'comments', 'modelBoosts', 'modelLikes'];
+const TASK_IDS = ['creality', 'finishPrint', 'modelDownloads', 'comments', 'modelBoosts', 'modelLikes', 'modelCollections'];
 const MIN_AUTOMATION_GAP_MINUTES = 10;
 const SILENT_RETRY_MINUTES = 10;
 
@@ -504,6 +504,7 @@ function taskDisplayName(taskId) {
     comments: 'Comentarios',
     modelBoosts: 'Impulsar diseños',
     modelLikes: 'Dar me gusta',
+    modelCollections: 'Añadir a la colección',
     shopOrders: 'Seguimiento de pedidos',
     shopRedemption: 'Canje de objetivo'
   })[taskId] || taskId;

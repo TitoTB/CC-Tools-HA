@@ -77,6 +77,7 @@ test('solo emite la finalización verificada de una impresión', () => {
 test('traduce identificadores públicos de tareas', () => {
   assert.equal(internalTaskId('checkin'), 'creality');
   assert.equal(internalTaskId('likes'), 'modelLikes');
+  assert.equal(internalTaskId('collections'), 'modelCollections');
   assert.equal(internalTaskId('unknown'), '');
 });
 
@@ -114,7 +115,30 @@ function fixtureConfig() {
       modelDownloads: task({ dailyLimit: 30 }),
       comments: task({ dailyLimit: 6 }),
       modelBoosts: task({ availableBoosts: 2 }),
-      modelLikes: task()
+      modelLikes: task(),
+      modelCollections: task()
     }
   };
 }
+
+test('expone colecciones con progreso, programación, ejecución activa y eventos', () => {
+  const next = '2026-09-29T09:00:00.000Z';
+  const state = buildHomeAssistantState({
+    config: fixtureConfig(), dailyCounters: { modelCollections: 1 },
+    nextExecutions: { modelCollections: next },
+    scheduler: { running: true, runningTask: 'modelCollections' }
+  });
+  assert.equal(state.tasks.collections.name, 'Añadir a la colección');
+  assert.equal(state.tasks.collections.enabled, true);
+  assert.equal(state.tasks.collections.dailyCount, 1);
+  assert.equal(state.tasks.collections.dailyLimit, 1);
+  assert.equal(state.tasks.collections.nextRunAt, next);
+  assert.equal(state.scheduler.runningTask, 'collections');
+  const events = buildHomeAssistantEvents(['success', 'failed', 'skipped'].map(status => ({
+    id: status, taskId: 'modelCollections', status,
+    details: { acted: [{ id: 'model', title: 'Modelo', url: 'https://example.test/model' }] }
+  })));
+  assert.deepEqual(events.map(event => event.type), ['task_completed', 'task_failed']);
+  assert.ok(events.every(event => event.task === 'collections'));
+  assert.equal(events[0].related.id, 'model');
+});

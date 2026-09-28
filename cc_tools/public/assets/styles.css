@@ -3289,10 +3289,12 @@ textarea {
 .designs-table th:nth-child(5),
 .designs-table th:nth-child(6),
 .designs-table th:nth-child(7),
+.designs-table th:nth-child(8),
 .designs-table td:nth-child(1),
 .designs-table td:nth-child(5),
 .designs-table td:nth-child(6),
-.designs-table td:nth-child(7) {
+.designs-table td:nth-child(7),
+.designs-table td:nth-child(8) {
   width: 1%;
   white-space: nowrap;
 }
@@ -3318,7 +3320,8 @@ textarea {
 .designs-table th:nth-child(4) .design-sort-button,
 .designs-table th:nth-child(5) .design-sort-button,
 .designs-table th:nth-child(6) .design-sort-button,
-.designs-table th:nth-child(7) .design-sort-button {
+.designs-table th:nth-child(7) .design-sort-button,
+.designs-table th:nth-child(8) .design-sort-button {
   justify-content: center;
   width: 100%;
 }
@@ -3326,9 +3329,11 @@ textarea {
 .designs-table th:nth-child(5),
 .designs-table th:nth-child(6),
 .designs-table th:nth-child(7),
+.designs-table th:nth-child(8),
 .designs-table td:nth-child(5),
 .designs-table td:nth-child(6),
-.designs-table td:nth-child(7) {
+.designs-table td:nth-child(7),
+.designs-table td:nth-child(8) {
   text-align: center;
 }
 

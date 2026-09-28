@@ -9,7 +9,8 @@ export const HOME_ASSISTANT_TASKS = Object.freeze({
   downloads: 'modelDownloads',
   comments: 'comments',
   boosts: 'modelBoosts',
-  likes: 'modelLikes'
+  likes: 'modelLikes',
+  collections: 'modelCollections'
 });
 
 const TASK_LABELS = Object.freeze({
@@ -19,6 +20,7 @@ const TASK_LABELS = Object.freeze({
   comments: 'Comentarios',
   modelBoosts: 'Impulsar diseños',
   modelLikes: 'Dar me gusta',
+  modelCollections: 'Añadir a la colección',
   shopOrders: 'Seguimiento de pedidos',
   shopRedemption: 'Canje de puntos'
 });

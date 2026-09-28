@@ -3165,6 +3165,7 @@ function renderDesigns() {
       <td>${designAuthorCell(design)}</td>
       <td>${designCategoryCell(design)}</td>
       <td>${statusIcon('heart', design.likeCompleted, design.likeActionState, design.id, 'like')}</td>
+      <td>${statusIcon('bookmark', design.collectionCompleted, design.collectionActionState, design.id, 'collection')}</td>
       <td>${commentStatusIcon(design.commentCompleted)}</td>
       <td>${boostStatusIcon(design.boostCount)}</td>
     `;
@@ -3175,7 +3176,7 @@ function renderDesigns() {
     const message = state.designs.query || designFiltersAreActive()
       ? 'No se encontraron diseños que coincidan con la búsqueda o los filtros.'
       : 'Todavía no hay diseños descargados.';
-    fields.designsTableBody.innerHTML = `<tr><td colspan="7">${message}</td></tr>`;
+    fields.designsTableBody.innerHTML = `<tr><td colspan="8">${message}</td></tr>`;
   }
 
   fields.designsPage.textContent = `Página ${state.designs.page} de ${state.designs.totalPages}`;
