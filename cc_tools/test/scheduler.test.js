@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import {
   advanceDownloadPlan,
   advanceFinishPrintPlan,
+  boostAvailabilityRefreshDue,
   consumeManualDownloadSuccesses,
   delayPendingTaskPlan,
   isGlobalBlockingIncident,
   updateAutomationHealth,
+  updateModelBoostState,
   updateNextRunAfterExecution,
   parseRetryAfterMilliseconds
 } from '../src/scheduler.js';
@@ -67,6 +69,32 @@ test('un fallo recuperable se reprograma una hora después dentro de la ventana'
   const nextRunAt = new Date(task.nextRunAt);
   assert.ok(nextRunAt >= new Date('2026-09-20T11:00:00Z'));
   assert.ok(nextRunAt < new Date('2026-09-20T20:00:00Z'));
+});
+
+test('vuelve a consultar los boosts si el saldo diario guardado sigue a cero', () => {
+  const now = new Date('2026-09-20T10:31:00Z');
+  assert.equal(boostAvailabilityRefreshDue({
+    timezone: 'UTC',
+    availabilityDate: '2026-09-20',
+    availabilityCheckedAt: '2026-09-20T10:00:00Z',
+    availableBoosts: 0
+  }, now), true);
+  assert.equal(boostAvailabilityRefreshDue({
+    timezone: 'UTC',
+    availabilityDate: '2026-09-20',
+    availabilityCheckedAt: '2026-09-20T10:00:00Z',
+    availableBoosts: 3
+  }, now), false);
+});
+
+test('un fallo previo a consultar boletos no borra el saldo de boosts conocido', () => {
+  const config = { tasks: { modelBoosts: { availableBoosts: 3, availabilityDate: '2026-09-20' } } };
+
+  updateModelBoostState(config, 'modelBoosts', {
+    details: { boostConsumed: false, retryableToday: true }
+  });
+
+  assert.equal(config.tasks.modelBoosts.availableBoosts, 3);
 });
 
 test('una ejecución programada consume un único horario aunque falle', () => {

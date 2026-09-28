@@ -39,6 +39,7 @@ export async function runModelBoost(taskConfig = {}) {
     let design = designs[0];
     let consumed = false;
     let ticketsAvailable = 0;
+    let availabilityKnown = false;
     try {
       let resolved = null;
       let ownModelsSkipped = 0;
@@ -72,6 +73,7 @@ export async function runModelBoost(taskConfig = {}) {
       const listResponse = await postJson(page, BOOST_LIST_URL, { page: 1, pageSize: 100, state: 1 }, authenticationHeaders);
       ensureAccepted(listResponse, 'BOOST_LIST_FAILED', 'No se pudo consultar la lista de boletos boost.');
       ticketsAvailable = Math.max(ticketsAvailable, Number(listResponse.body?.result?.count) || 0);
+      availabilityKnown = true;
       if (alreadyUsedToday) {
         return skipped('El boost diario ya se ha utilizado.', {
           alreadyUsedToday: true,
@@ -177,8 +179,10 @@ export async function runModelBoost(taskConfig = {}) {
         message: consumed ? 'El boost se aplicó, pero el proceso posterior falló.' : 'No se pudo aplicar el boost.',
         details: {
           boostConsumed: consumed,
-          ticketsAvailable,
-          availabilityCheckedAt: new Date().toISOString(),
+          ...(availabilityKnown ? {
+            ticketsAvailable,
+            availabilityCheckedAt: new Date().toISOString()
+          } : {}),
           boosted: [],
           acted: [],
           retryableToday: !consumed,

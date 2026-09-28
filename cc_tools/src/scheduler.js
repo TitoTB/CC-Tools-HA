@@ -427,10 +427,10 @@ function ensureDownloadPlan(taskConfig, runs = [], now = new Date()) {
 async function refreshDailyBoostAvailability(config, now = new Date()) {
   const task = config.tasks.modelBoosts;
   if (!task?.enabled) return;
-  const today = dayKey(task.timezone, now);
-  if (task.availabilityDate === today) return;
   const retryAt = Date.parse(task.availabilityRetryAt || '');
   if (Number.isFinite(retryAt) && retryAt > now.getTime()) return;
+  if (!boostAvailabilityRefreshDue(task, now)) return;
+  const today = dayKey(task.timezone, now);
 
   running = true;
   runningTask = 'modelBoosts';
@@ -452,6 +452,14 @@ async function refreshDailyBoostAvailability(config, now = new Date()) {
     running = false;
     runningTask = '';
   }
+}
+
+export function boostAvailabilityRefreshDue(taskConfig = {}, now = new Date()) {
+  const today = dayKey(taskConfig.timezone, now);
+  if (taskConfig.availabilityDate !== today) return true;
+  if (Math.max(0, Number(taskConfig.availableBoosts) || 0) > 0) return false;
+  const checkedAt = Date.parse(taskConfig.availabilityCheckedAt || '');
+  return !Number.isFinite(checkedAt) || now.getTime() - checkedAt >= 30 * 60 * 1000;
 }
 
 async function appendExecutionError(taskId, source, startedAt, error) {
@@ -938,7 +946,7 @@ function updateDependentModelActions(config, taskId, result) {
 
 }
 
-function updateModelBoostState(config, taskId, result) {
+export function updateModelBoostState(config, taskId, result) {
   if (taskId !== 'modelBoosts') return;
   const task = config.tasks.modelBoosts;
   if (Number.isFinite(Number(result.details?.ticketsAvailable))) {
