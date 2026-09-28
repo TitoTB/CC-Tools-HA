@@ -7,6 +7,7 @@ import {
   delayPendingTaskPlan,
   isGlobalBlockingIncident,
   updateAutomationHealth,
+  updateNextRunAfterExecution,
   parseRetryAfterMilliseconds
 } from '../src/scheduler.js';
 
@@ -53,6 +54,19 @@ test('interpreta Retry-After expresado como fecha HTTP', () => {
 
 test('descarta un Retry-After no válido', () => {
   assert.equal(parseRetryAfterMilliseconds('más tarde'), null);
+});
+
+test('un fallo recuperable se reprograma una hora después dentro de la ventana', () => {
+  const task = { windowStart: '08:00', windowEnd: '20:00' };
+  const now = new Date('2026-09-20T10:00:00Z');
+
+  updateNextRunAfterExecution(task, 'modelBoosts', 'schedule', {
+    details: { retryableToday: true }
+  }, now);
+
+  const nextRunAt = new Date(task.nextRunAt);
+  assert.ok(nextRunAt >= new Date('2026-09-20T11:00:00Z'));
+  assert.ok(nextRunAt < new Date('2026-09-20T20:00:00Z'));
 });
 
 test('una ejecución programada consume un único horario aunque falle', () => {

@@ -42,6 +42,7 @@ export async function runModelBoost(taskConfig = {}) {
     try {
       let resolved = null;
       let ownModelsSkipped = 0;
+      let rejectedModels = 0;
       for (const candidate of designs) {
         design = candidate;
         const target = await resolveBoostTarget(page, candidate, observer, taskConfig.ownUserId);
@@ -49,14 +50,20 @@ export async function runModelBoost(taskConfig = {}) {
           ownModelsSkipped += 1;
           continue;
         }
+        if (target && !boostResponseAccepted(target.permission)) {
+          rejectedModels += 1;
+          continue;
+        }
         resolved = target;
         if (resolved) break;
+      }
+      if (!resolved && rejectedModels) {
+        throw taskError('BOOST_NOT_ALLOWED', 'Creality Cloud no permite impulsar ninguno de los diseños disponibles.');
       }
       if (!resolved && ownModelsSkipped) return skipped('Los diseños disponibles pertenecen al usuario conectado y se han omitido.');
       if (!resolved) throw taskError('BOOST_TARGET_NOT_FOUND', 'No se pudo identificar un diseño apto para recibir el boost.');
 
-      const { modelGroupId, authenticationHeaders, permission } = resolved;
-      ensureAccepted(permission, 'BOOST_NOT_ALLOWED', 'Creality Cloud no permite impulsar el diseño seleccionado.');
+      const { modelGroupId, authenticationHeaders } = resolved;
 
       const countResponse = await postJson(page, BOOST_COUNT_URL, { state: 1 }, authenticationHeaders);
       ensureAccepted(countResponse, 'BOOST_COUNT_FAILED', 'No se pudo consultar el número de boletos boost disponibles.');
@@ -306,12 +313,16 @@ async function postJson(page, url, payload, headers = {}) {
 }
 
 function ensureAccepted(response, code, message) {
-  const bodyCode = Number(response?.body?.code);
-  const failType = Number(response?.body?.result?.failType || 0);
-  if (response?.ok && bodyCode === 0 && failType === 0) return;
+  if (boostResponseAccepted(response)) return;
   const error = taskError(code, message);
   error.technical = JSON.stringify(response || null);
   throw error;
+}
+
+export function boostResponseAccepted(response) {
+  const bodyCode = Number(response?.body?.code);
+  const failType = Number(response?.body?.result?.failType || 0);
+  return Boolean(response?.ok && bodyCode === 0 && failType === 0);
 }
 
 export function verifyBoostLottery(raffle) {

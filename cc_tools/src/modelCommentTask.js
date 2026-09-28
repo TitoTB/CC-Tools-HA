@@ -106,7 +106,7 @@ export async function runModelComment(taskConfig = {}, options = {}) {
         observer,
         incentive.title,
         before,
-        [0, 5000, 10000, 15000],
+        [0, 5000, 10000, 15000, 20000],
         { timezone: taskConfig.timezone }
       );
       const rewardVerification = compareIncentiveProgress(before, after);
@@ -402,7 +402,8 @@ async function postComment(page, entry, kind) {
     }
     if (!(await input.count())) throw taskError('COMMENT_IMAGE_CONTROL_NOT_FOUND', 'No se encontró el control para adjuntar la imagen.');
     await input.setInputFiles(imagePath);
-    await page.waitForTimeout(2500);
+    await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(5000);
   }
 
   const responsePromise = page.waitForResponse(

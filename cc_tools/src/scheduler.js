@@ -3,7 +3,7 @@ import { runCrealityCheckin } from './crealityTask.js';
 import { runModelDownloads } from './modelDownloadTask.js';
 import { actionInfo, runModelAction } from './modelActionTask.js';
 import { sendTelegram } from './telegram.js';
-import { generateDownloadPlan, isDue, scheduleNextRun } from './timeWindow.js';
+import { generateDownloadPlan, isDue, scheduleNextRun, scheduleNextRunInCurrentWindow } from './timeWindow.js';
 import { diagnoseTaskError } from './crealityDiagnostics.js';
 import { mergePointsState, pointsSummaryFromResult } from './pointsCounter.js';
 import { applyStartedVirtualPrint, manualVirtualPrintConfig, startVirtualPrint } from './finishPrintTask.js';
@@ -357,8 +357,7 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
   }
 }
 
-function updateNextRunAfterExecution(taskConfig, taskId, source, result) {
-  const now = new Date();
+export function updateNextRunAfterExecution(taskConfig, taskId, source, result, now = new Date()) {
   if (taskId === 'modelDownloads') {
     if (source === 'schedule') {
       advanceDownloadPlan(taskConfig);
@@ -385,7 +384,7 @@ function updateNextRunAfterExecution(taskConfig, taskId, source, result) {
   }
 
   if (result.details?.retryableToday) {
-    taskConfig.nextRunAt = nextAllowedRunAt(taskConfig, new Date(now.getTime() + 60 * 60 * 1000));
+    taskConfig.nextRunAt = scheduleNextRunInCurrentWindow(taskConfig, now, 60);
     return;
   }
 

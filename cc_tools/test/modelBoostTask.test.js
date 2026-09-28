@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boostConsumedToday, selectBoostCandidates, verifyBoostLottery } from '../src/modelBoostTask.js';
+import { boostConsumedToday, boostResponseAccepted, selectBoostCandidates, verifyBoostLottery } from '../src/modelBoostTask.js';
 
 test('selecciona solo diseños favoritos activos en rondas del menos impulsado al más impulsado', () => {
   const candidates = selectBoostCandidates([
@@ -53,4 +53,10 @@ test('verifica el boost por la lotería y no por el saldo de puntos', () => {
     prizes: ['Sin premio']
   });
   assert.equal(verifyBoostLottery({ status: 'counter_unavailable' }).status, 'lottery_unverified');
+});
+
+test('distingue diseños que Creality permite impulsar', () => {
+  assert.equal(boostResponseAccepted({ ok: true, body: { code: 0, result: { failType: 0 } } }), true);
+  assert.equal(boostResponseAccepted({ ok: true, body: { code: 0, result: { failType: 1 } } }), false);
+  assert.equal(boostResponseAccepted({ ok: false, body: { code: 500 } }), false);
 });
