@@ -3,7 +3,7 @@
 ## 1.0.12
 
 - Activa Añadir a la colección con ejecución manual y programación.
-- Recupera el modelId real de la ficha, guarda en Default Collections y verifica el punto diario.
+- Recupera el modelId real exclusivamente del HTML de la ficha, guarda en Default Collections y verifica el punto diario.
 - Expone la tarea collections, sus controles y eventos en la API de Home Assistant.
 
 ## 1.0.11

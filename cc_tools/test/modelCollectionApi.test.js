@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import vm from 'node:vm';
-import { COLLECTION_URL, collectionModelIdFromNuxt, collectionModelIdFromRequest, collectionSessionHeaders, captureCollectionTarget, addModelToDefaultCollection } from '../src/modelCollectionApi.js';
+import { COLLECTION_URL, collectionModelIdFromNuxt, collectionSessionHeaders, captureCollectionTarget, addModelToDefaultCollection } from '../src/modelCollectionApi.js';
 import { chooseCandidates, isCollectionControlActive } from '../src/modelActionTask.js';
 
 const modelId = '6a60842144eb4483e2202bed';
@@ -45,12 +45,12 @@ test('no extrae IDs de recomendaciones ni perfiles del estado Nuxt', () => {
   assert.equal(collectionModelIdFromNuxt(JSON.stringify(data), designUrl), '');
 });
 
-test('acepta modelId explícito de fileListPage en cuerpo o query, nunca profileId', () => {
-  assert.equal(collectionModelIdFromRequest(filesUrl, { modelId }), modelId);
-  assert.equal(collectionModelIdFromRequest(`${filesUrl}?modelId=${modelId}`), modelId);
-  assert.equal(collectionModelIdFromRequest(filesUrl.replace('www.', 'api.'), { modelId }), modelId);
-  assert.equal(collectionModelIdFromRequest(filesUrl, { profileId }), '');
-  assert.equal(collectionModelIdFromRequest(filesUrl.replace('www.crealitycloud.com', 'example.test'), { modelId }), '');
+test('no obtiene el identificador de fileListPage si falta en el HTML', async () => {
+  const page = pageFixture();
+  const capture = captureCollectionTarget(page);
+  page.request(`${filesUrl}?modelId=${modelId}`, { modelId }, headers);
+  await assert.rejects(capture.read(1), { code: 'COLLECTION_MODEL_ID_MISSING' });
+  capture.stop();
 });
 
 test('filtra las credenciales y no mezcla sesiones incompletas', () => {
@@ -70,14 +70,14 @@ test('reproduce el fallo 0.1.39: modelo SSR y sesión de otra API sin fileListPa
   assert.equal(page.listenerCount('request'), 0);
 });
 
-test('combina modelId y sesión obtenidos de peticiones diferentes', async () => {
-  const page = pageFixture();
+test('usa solo el ID del HTML aunque una petición contenga un ID diferente', async () => {
+  const page = pageFixture(nuxt());
   const capture = captureCollectionTarget(page);
-  page.request(filesUrl, { modelId }, {});
+  page.request(filesUrl, { modelId: profileId }, {});
   page.request('https://www.crealitycloud.com/api/cxy/v2/user/info', null, headers);
   const result = await capture.read(20);
   assert.equal(result.modelId, modelId);
-  assert.equal(result.source, 'fileListPage');
+  assert.equal(result.source, 'nuxt-model-info');
   capture.stop();
 });
 

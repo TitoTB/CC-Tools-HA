@@ -22,13 +22,6 @@ export function collectionSessionHeaders(headers = {}) {
   return filtered.__cxy_token_ && filtered.__cxy_uid_ ? filtered : null;
 }
 
-export function collectionModelIdFromRequest(url, payload) {
-  const parsed = apiUrl(url);
-  if (!parsed || !/\/model\/fileListPage\/?$/.test(parsed.pathname)) return '';
-  const id = payload?.modelId || parsed.searchParams.get('modelId');
-  return validId(id) ? id : '';
-}
-
 // Nuxt serializes its state as a table of references. Follow only the current
 // model-info entry; IDs in printer profiles or recommendation lists are unrelated.
 export function collectionModelIdFromNuxt(text, pageUrl) {
@@ -62,7 +55,6 @@ export function captureCollectionTarget(page) {
   let source = '';
   let authenticationHeaders = null;
   let apiRequests = 0;
-  let fileRequests = 0;
   let resolveTarget;
   let timer;
   const target = new Promise(resolve => { resolveTarget = resolve; });
@@ -74,11 +66,6 @@ export function captureCollectionTarget(page) {
       if (request.frame() !== page.mainFrame()) return;
       if (!apiUrl(request.url())) return;
       apiRequests++;
-      let payload = null;
-      try { payload = request.postDataJSON(); } catch { /* GET or non-JSON body. */ }
-      const observedId = collectionModelIdFromRequest(request.url(), payload);
-      if (/\/fileListPage\/?(?:\?|$)/.test(request.url())) fileRequests++;
-      if (observedId) { modelId = observedId; source = 'fileListPage'; }
       const session = collectionSessionHeaders(await request.allHeaders());
       if (stopped) return;
       if (session) authenticationHeaders = session;
@@ -100,8 +87,8 @@ export function captureCollectionTarget(page) {
       if (!found) {
         const missing = modelId ? 'sesión autenticada' : authenticationHeaders ? 'modelId de la ficha' : 'modelId de la ficha y sesión autenticada';
         const error = collectionError(modelId ? 'COLLECTION_SESSION_MISSING' : 'COLLECTION_MODEL_ID_MISSING',
-          `No se pudo obtener ${missing}. API observadas: ${apiRequests}; fileListPage: ${fileRequests}; datos del modelo: ${source || 'no disponibles'}. No se ha enviado la acción.`);
-        error.collectionContext = { modelFound: Boolean(modelId), sessionFound: Boolean(authenticationHeaders), source, apiRequests, fileRequests };
+          `No se pudo obtener ${missing}. API observadas para la sesión: ${apiRequests}; datos HTML del modelo: ${source || 'no disponibles'}. No se ha enviado la acción.`);
+        error.collectionContext = { modelFound: Boolean(modelId), sessionFound: Boolean(authenticationHeaders), source, apiRequests };
         throw error;
       }
       return found;

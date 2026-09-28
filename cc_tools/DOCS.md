@@ -19,6 +19,8 @@ Antes de iniciar el complemento puedes configurar:
 
 La herramienta guarda un diseño pendiente en Default Collections y verifica el punto diario de Collection Models. Si la recompensa ya está completada o el modelo ya está guardado, omite la acción. La programación requiere que Descubrir diseños esté activado.
 
+El identificador del modelo se obtiene exclusivamente del bloque `__NUXT_DATA__` del HTML de su ficha. La sesión autenticada se obtiene por separado de las cabeceras de las peticiones de la API. Si el HTML no contiene un identificador válido, no se envía el guardado.
+
 La API local expone esta herramienta como `collections` en `/api/integration/status` y en los eventos de `/api/integration/events`. Permite activar o desactivar su programación con `PATCH /api/integration/tasks/collections` (`{"enabled": true}` o `false`) y ejecutarla con `POST /api/integration/tasks/collections/run`. Al desactivar Descubrir diseños se desactiva también la programación de colecciones.
 
 La creación de entidades y controles en Home Assistant depende de que la integración cliente admita esta tarea; este complemento proporciona su API.
