@@ -1,4 +1,5 @@
 import { inspectCrealityPage } from './crealityDiagnostics.js';
+import { isNavigationTimeout, navigateToCrealityPage } from './crealityNavigation.js';
 import { parsePointsTotal, readPointsSummary } from './pointsCounter.js';
 
 export const INCENTIVE_POINTS_URL = 'https://www.crealitycloud.com/es/incentive-points?thirdType=earn-points';
@@ -7,8 +8,13 @@ const TASK_RESPONSE_URL = 'https://www.crealitycloud.com/api/cxy/v2/task/taskRes
 export async function readIncentiveProgress(page, observer, title, options = {}) {
   const taskContext = captureTaskContext(page);
   try {
-    await page.goto(INCENTIVE_POINTS_URL, { waitUntil: 'domcontentloaded' });
+    await navigateToCrealityPage(page, INCENTIVE_POINTS_URL);
     await page.waitForTimeout(3000);
+  } catch (error) {
+    if (isNavigationTimeout(error) || error.code === 'NAVIGATION_TARGET_MISMATCH') {
+      throw incentivePageNotReadyError(error.message);
+    }
+    throw error;
   } finally {
     await taskContext.stop();
   }
@@ -58,21 +64,43 @@ export async function readIncentiveProgress(page, observer, title, options = {})
   return attachPointsSummary(page, progress, options, fallbackTotal);
 }
 
-export function incentivePageNotReadyError() {
+export function incentivePageNotReadyError(technical = '') {
   const error = new Error('La página de tareas recompensadas no terminó de cargar.');
   error.code = 'INCENTIVE_PAGE_NOT_READY';
   error.category = 'page';
   error.systemic = false;
   error.silentRetry = true;
+  error.technical = technical;
   return error;
 }
 
 export async function waitForIncentiveProgress(page, observer, title, before, delays = [0, 10000, 15000, 20000], options = {}) {
   let latest = null;
+  let verificationError = null;
   for (const delayMs of delays) {
     if (delayMs) await page.waitForTimeout(delayMs);
-    latest = await readIncentiveProgress(page, observer, title, { ...options, includePoints: false });
+    try {
+      latest = await readIncentiveProgress(page, observer, title, { ...options, includePoints: false });
+      verificationError = null;
+    } catch (error) {
+      if (error.code !== 'INCENTIVE_PAGE_NOT_READY') throw error;
+      verificationError = error;
+      continue;
+    }
     if (incentiveAdvanced(before, latest)) break;
+  }
+  if (!latest && verificationError) {
+    return {
+      found: false,
+      title,
+      checkedAt: new Date().toISOString(),
+      verificationError: {
+        code: verificationError.code,
+        message: verificationError.message,
+        technical: verificationError.technical || ''
+      },
+      pointsSummary: before?.pointsSummary
+    };
   }
   if (latest) {
     latest.pointsSummary = await readPointsSummary(page, {

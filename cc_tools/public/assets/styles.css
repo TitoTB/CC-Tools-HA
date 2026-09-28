@@ -1176,9 +1176,31 @@ label span {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.points-shop-orders > h3 {
-  margin: 0 0 14px;
+.points-shop-orders-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.points-shop-orders-header h3 {
+  margin: 0;
   font-size: 1rem;
+}
+
+.points-shop-orders-header a {
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.points-shop-orders-header a:hover,
+.points-shop-orders-header a:focus-visible {
+  color: var(--accent-strong);
 }
 
 .points-shop-orders-list {

@@ -39,6 +39,7 @@ export function buildHomeAssistantState({
   const timezone = config.timezone || 'Europe/Madrid';
   const latestCheckin = runs.find((run) => run.taskId === 'creality');
   const orders = Array.isArray(config.shopOrders?.items) ? config.shopOrders.items : [];
+  const latestOrder = latestShopOrder(orders);
   const taskStates = Object.fromEntries(EXPOSED_TASKS.map(([publicId, internalId]) => {
     const task = config.tasks?.[internalId] || {};
     return [publicId, {
@@ -93,10 +94,35 @@ export function buildHomeAssistantState({
     orders: {
       pending: orders.filter((order) => order.statusKind === 'pending' && order.archived !== true).length,
       shipped: orders.filter((order) => order.statusKind === 'shipped' && order.archived !== true).length,
+      latest: latestOrder ? homeAssistantOrder(latestOrder) : null,
       updatedAt: String(config.shopOrders?.updatedAt || '')
     },
     tasks: taskStates,
     printers: buildPrinterStates(config.tasks?.finishPrint || {}, runs, timezone)
+  };
+}
+
+function latestShopOrder(orders) {
+  return [...orders].sort((left, right) => {
+    const rightDate = Date.parse(right.createdAt || right.updatedAt || '') || 0;
+    const leftDate = Date.parse(left.createdAt || left.updatedAt || '') || 0;
+    return rightDate - leftDate;
+  })[0] || null;
+}
+
+function homeAssistantOrder(order) {
+  return {
+    id: String(order.id || ''),
+    orderNumber: String(order.orderNumber || ''),
+    title: String(order.title || ''),
+    imageUrl: String(order.imageUrl || ''),
+    points: Math.max(0, Number(order.points) || 0),
+    quantity: Math.max(1, Number(order.quantity) || 1),
+    status: String(order.status || 'Estado desconocido'),
+    statusKind: String(order.statusKind || 'neutral'),
+    region: String(order.region || ''),
+    createdAt: String(order.createdAt || ''),
+    updatedAt: String(order.updatedAt || '')
   };
 }
 

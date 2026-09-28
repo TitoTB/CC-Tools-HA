@@ -1,10 +1,17 @@
 # Changelog
 
-## 1.0.11
+## 1.0.12
 
 - Activa Añadir a la colección con ejecución manual y programación.
 - Recupera el modelId real de la ficha, guarda en Default Collections y verifica el punto diario.
 - Expone la tarea collections, sus controles y eventos en la API de Home Assistant.
+
+## 1.0.11
+
+- Mantiene actualizada la disponibilidad de boletos boost y mejora sus reintentos.
+- Refuerza la verificación de recompensas de comentarios y descargas.
+- Tolera navegaciones lentas de Creality Cloud sin duplicar errores de descarga.
+- Añade el enlace al histórico de pedidos y expone el último pedido a la integración de Home Assistant.
 
 ## 1.0.10
 
