@@ -32,6 +32,8 @@ test('crea una instantánea estable para Home Assistant', () => {
   assert.equal(state.scheduler.runningTask, 'downloads');
   assert.equal(state.printers[0].lastGcode, 'pieza.gcode');
   assert.equal(state.orders.pending, 1);
+  assert.equal(state.orders.latest.status, 'Pendiente');
+  assert.equal(state.orders.latest.title, 'Producto');
 });
 
 test('convierte ejecuciones en eventos deduplicables', () => {
@@ -94,7 +96,11 @@ function fixtureConfig() {
     crealityProfile: { userId: '7963944884', name: 'Aguacatec', avatarUrl: '' },
     points: { total: 1000, earnedToday: 10, status: 'current', updatedAt: '' },
     shopOrders: {
-      items: [{ id: '1', title: 'Producto', statusKind: 'pending', archived: false }],
+      items: [{
+        id: '1', orderNumber: 'CC-1', title: 'Producto', status: 'Pendiente',
+        statusKind: 'pending', points: 1200, quantity: 1,
+        createdAt: '2026-09-27T10:00:00.000Z', archived: false
+      }],
       updatedAt: ''
     },
     tasks: {
