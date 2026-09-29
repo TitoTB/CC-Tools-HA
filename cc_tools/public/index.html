@@ -501,51 +501,7 @@
           </div>
         </section>
 
-        <section class="setup-step">
-          <div class="setup-step-heading">
-            <div>
-              <h3>Realizar impresión</h3>
-            </div>
-            <div class="setup-step-actions">
-              <button id="toggle-finish-print-now" class="setup-help-button" type="button" title="Realizar impresión" aria-label="Realizar impresión" aria-expanded="false">
-                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M256 0 32 128v256l224 128 224-128V128L256 0zm0 64 160 91-160 91-160-91L256 64zm-160 147 128 73v137L96 348V211zm192 73 128-73v137l-128 73V284z"/></svg>
-              </button>
-            </div>
-          </div>
-          <div id="finish-print-now-setup" class="setup-step-config" hidden>
-            <div class="finish-manual-row">
-              <label class="inline-setting-field finish-printer-select-field finish-manual-select-field">
-                <span>Listado de impresoras</span>
-                <select id="finish-manual-printer">
-                  <option value="">Selecciona una impresora</option>
-                </select>
-              </label>
-              <button id="refresh-finish-manual" class="secondary icon-action-button" type="button" title="Actualizar impresoras y G-code" aria-label="Actualizar impresoras y G-code">
-                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M105.1 202.6c7.7-21.8 20.2-42.3 37.8-59.8c62.5-62.5 163.8-62.5 226.3 0L386.3 160H352c-17.7 0-32 14.3-32 32s14.3 32 32 32H463.5c17.7 0 32-14.3 32-32V80c0-17.7-14.3-32-32-32s-32 14.3-32 32v35.2L414.4 97.6c-87.5-87.5-229.3-87.5-316.8 0C73.2 122 55.6 150.7 44.8 181.4c-5.9 16.7 2.9 34.9 19.5 40.8s34.9-2.9 40.8-19.6zM39 289.3c-5 1.5-9.8 4.2-13.7 8.2c-4 4-6.7 8.8-8.1 14c-.8 2.9-1.2 5.9-1.2 8.9V432c0 17.7 14.3 32 32 32s32-14.3 32-32V396.9l17.6 17.5c87.5 87.4 229.3 87.4 316.7 0c24.4-24.4 42.1-53.1 52.9-83.8c5.9-16.7-2.9-34.9-19.5-40.8s-34.9 2.9-40.8 19.5c-7.7 21.8-20.2 42.3-37.8 59.8c-62.5 62.5-163.8 62.5-226.3 0L125.6 352H160c17.7 0 32-14.3 32-32s-14.3-32-32-32H48.4c-3.2 0-6.4 .5-9.4 1.3z"/></svg>
-              </button>
-              <a class="button-like secondary icon-action-button" href="https://www.crealitycloud.com/es/workbench-beta/?type=1" target="_blank" rel="noopener noreferrer" title="Abrir Banco de trabajo" aria-label="Abrir Banco de trabajo">
-                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M78.6 5C69.1-2.4 55.6-1.5 47 7L7 47c-8.5 8.5-9.4 22-2.1 31.6l80 104c4.5 5.9 11.6 9.4 19 9.4h54.1l109 109c-14.7 29-10 65.4 14.3 89.6l112 112c12.5 12.5 32.8 12.5 45.3 0l64-64c12.5-12.5 12.5-32.8 0-45.3l-112-112c-24.2-24.2-60.6-29-89.6-14.3l-109-109v-54.1c0-7.5-3.5-14.5-9.4-19L78.6 5zM19.9 396.1C7.2 408.8 0 426.1 0 444.1C0 481.6 30.4 512 67.9 512c18 0 35.3-7.2 48-19.9L233.7 374.3c-7.8-20.9-9-43.6-3.6-65.1l-61.7-61.7L19.9 396.1zM512 144c0-10.5-1.1-20.7-3.2-30.5c-2.4-11.2-16.1-14.1-24.2-6l-58.3 58.3-45.2-7.5-7.5-45.2 58.3-58.3c8.1-8.1 5.2-21.8-6-24.2C278.7 1.1 268.5 0 258 0c-54.7 0-102.2 30.4-126.6 75.2l42.3 55c6 7.8 9.3 17.4 9.3 27.2v12.9l65.2 65.2c14.6-8.5 31.5-13.5 49.6-13.5c6.5 0 12.8 .6 19 1.8l10.8-10.8C374.6 232.6 512 199.2 512 144z"/></svg>
-              </a>
-            </div>
-            <div class="finish-manual-row">
-              <label class="inline-setting-field finish-printer-select-field finish-manual-select-field">
-                <span>Listado de GCODE</span>
-                <select id="finish-manual-file">
-                  <option value="">Selecciona un G-code</option>
-                </select>
-              </label>
-              <a class="button-like secondary icon-action-button" href="https://www.crealitycloud.com/es/flowslicer/project?tab=gcode" target="_blank" rel="noopener noreferrer" title="Abrir archivos G-code" aria-label="Abrir archivos G-code">
-                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M64 0C28.7 0 0 28.7 0 64V448c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V160H384c-17.7 0-32-14.3-32-32V0H64zM384 0V128H512L384 0z"/></svg>
-              </a>
-              <button id="run-selected-finish-print" class="finish-manual-run" type="button">
-                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M256 0 32 128v256l224 128 224-128V128L256 0zm0 64 160 91-160 91-160-91L256 64zm-160 147 128 73v137L96 348V211zm192 73 128-73v137l-128 73V284z"/></svg>
-                <span>Imprimir ahora</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section class="setup-step">
+        <section id="finish-print-schedule-section" class="setup-step finish-print-schedule-section">
           <div class="setup-step-heading">
             <div>
               <h3>Programar impresiones</h3>
@@ -611,6 +567,55 @@
             </div>
           </div>
         </section>
+
+        <section id="finish-printer-status-section" class="setup-step finish-printer-status-section" hidden>
+          <div class="setup-step-heading">
+            <div>
+              <h3>Mis impresoras</h3>
+            </div>
+            <div class="setup-step-actions">
+              <button id="refresh-finish-printer-status" class="secondary setup-help-button" type="button" title="Actualizar estado" aria-label="Actualizar estado de impresoras">
+                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M105.1 202.6c7.7-21.8 20.2-42.3 37.8-59.8c62.5-62.5 163.8-62.5 226.3 0L386.3 160H352c-17.7 0-32 14.3-32 32s14.3 32 32 32H463.5c17.7 0 32-14.3 32-32V80c0-17.7-14.3-32-32-32s-32 14.3-32 32v35.2L414.4 97.6c-87.5-87.5-229.3-87.5-316.8 0C73.2 122 55.6 150.7 44.8 181.4c-5.9 16.7 2.9 34.9 19.5 40.8s34.9-2.9 40.8-19.6zM39 289.3c-5 1.5-9.8 4.2-13.7 8.2c-4 4-6.7 8.8-8.1 14c-.8 2.9-1.2 5.9-1.2 8.9V432c0 17.7 14.3 32 32 32s32-14.3 32-32V396.9l17.6 17.5c87.5 87.4 229.3 87.4 316.7 0c24.4-24.4 42.1-53.1 52.9-83.8c5.9-16.7-2.9-34.9-19.5-40.8s-34.9 2.9-40.8 19.5c-7.7 21.8-20.2 42.3-37.8 59.8c-62.5 62.5-163.8 62.5-226.3 0L125.6 352H160c17.7 0 32-14.3 32-32s-14.3-32-32-32H48.4c-3.2 0-6.4 .5-9.4 1.3z"/></svg>
+              </button>
+              <a class="button-like secondary setup-help-button" href="https://www.crealitycloud.com/es/workbench-beta/?type=1" target="_blank" rel="noopener noreferrer" title="Abrir Banco de trabajo" aria-label="Abrir Banco de trabajo en una pestaña nueva">
+                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M78.6 5C69.1-2.4 55.6-1.5 47 7L7 47c-8.5 8.5-9.4 22-2.1 31.6l80 104c4.5 5.9 11.6 9.4 19 9.4h54.1l109 109c-14.7 29-10 65.4 14.3 89.6l112 112c12.5 12.5 32.8 12.5 45.3 0l64-64c12.5-12.5 12.5-32.8 0-45.3l-112-112c-24.2-24.2-60.6-29-89.6-14.3l-109-109v-54.1c0-7.5-3.5-14.5-9.4-19L78.6 5zM19.9 396.1C7.2 408.8 0 426.1 0 444.1C0 481.6 30.4 512 67.9 512c18 0 35.3-7.2 48-19.9L233.7 374.3c-7.8-20.9-9-43.6-3.6-65.1l-61.7-61.7L19.9 396.1zM512 144c0-10.5-1.1-20.7-3.2-30.5c-2.4-11.2-16.1-14.1-24.2-6l-58.3 58.3-45.2-7.5-7.5-45.2 58.3-58.3c8.1-8.1 5.2-21.8-6-24.2C278.7 1.1 268.5 0 258 0c-54.7 0-102.2 30.4-126.6 75.2l42.3 55c6 7.8 9.3 17.4 9.3 27.2v12.9l65.2 65.2c14.6-8.5 31.5-13.5 49.6-13.5c6.5 0 12.8 .6 19 1.8l10.8-10.8C374.6 232.6 512 199.2 512 144z"/></svg>
+              </a>
+              <a class="button-like secondary setup-help-button" href="https://www.crealitycloud.com/es/flowslicer/project?tab=gcode" target="_blank" rel="noopener noreferrer" title="Abrir Galería de GCODE" aria-label="Abrir Galería de GCODE en una pestaña nueva">
+                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M64 0C28.7 0 0 28.7 0 64V448c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V160H384c-17.7 0-32-14.3-32-32V0H64zM384 0V128H512L384 0z"/></svg>
+              </a>
+            </div>
+          </div>
+          <div id="finish-printer-status-list" class="finish-printer-status-list" aria-live="polite">
+            <p class="muted finish-printer-empty">Abre esta ventana para consultar el estado de las impresoras.</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="printer-error-modal" class="modal printer-error-modal" hidden>
+      <div class="modal-card printer-error-card" role="dialog" aria-modal="true" aria-labelledby="printer-error-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Creality Cloud</p>
+            <h2 id="printer-error-title">Error de impresión</h2>
+          </div>
+          <button id="close-printer-error" class="icon-button" type="button" aria-label="Cerrar">×</button>
+        </div>
+        <h3 id="printer-error-name" class="printer-error-name"></h3>
+        <div class="printer-error-summary">
+          <p id="printer-error-message" class="printer-error-message"></p>
+          <p id="printer-error-guidance" class="printer-error-guidance"></p>
+        </div>
+        <dl class="printer-error-facts">
+          <div><dt>Estado</dt><dd id="printer-error-state"></dd></div>
+          <div><dt>Archivo</dt><dd id="printer-error-gcode"></dd></div>
+          <div><dt>Detectado</dt><dd id="printer-error-observed"></dd></div>
+        </dl>
+        <a class="button-like secondary printer-error-workbench" href="https://www.crealitycloud.com/es/workbench-beta/?type=1" target="_blank" rel="noopener noreferrer">Abrir Banco de trabajo</a>
+        <details class="printer-error-technical">
+          <summary>Datos técnicos</summary>
+          <pre id="printer-error-details" class="printer-error-details"></pre>
+        </details>
       </div>
     </div>
 

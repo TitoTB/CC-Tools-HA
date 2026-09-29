@@ -23,11 +23,9 @@ const state = {
   },
   finishPrintPrinterPicker: '',
   finishPrintDraftProfiles: [],
-  finishPrintManual: {
-    printerName: '',
-    fileId: '',
-    files: []
-  },
+  finishPrintStatuses: [],
+  finishPrintStatusSelections: {},
+  finishPrintStatusFiles: { files: [], loading: false, error: '' },
   favoriteProfilesRefreshRunning: false,
   commentDrafts: [],
   commentEditingId: '',
@@ -78,10 +76,16 @@ const fields = {
   finishPrintDailyBadge: $('#finish-print-daily-badge'),
   finishPrintConfigModal: $('#finish-print-config-modal'),
   finishPrintRequirements: $('#finish-print-requirements'),
-  finishPrintNowSetup: $('#finish-print-now-setup'),
-  finishManualPrinter: $('#finish-manual-printer'),
-  finishManualFile: $('#finish-manual-file'),
   finishPrintSetup: $('#finish-print-setup'),
+  finishPrinterStatusList: $('#finish-printer-status-list'),
+  printerErrorModal: $('#printer-error-modal'),
+  printerErrorName: $('#printer-error-name'),
+  printerErrorMessage: $('#printer-error-message'),
+  printerErrorGuidance: $('#printer-error-guidance'),
+  printerErrorState: $('#printer-error-state'),
+  printerErrorGcode: $('#printer-error-gcode'),
+  printerErrorObserved: $('#printer-error-observed'),
+  printerErrorDetails: $('#printer-error-details'),
   finishPrinterSelect: $('#finish-printer-select'),
   finishFilesList: $('#finish-files-list'),
   finishPrintWindowStart: $('#finish-print-window-start'),
@@ -582,8 +586,8 @@ $('#open-finish-print-config').addEventListener('click', async () => {
   try {
     await refresh();
     state.finishPrintDraftProfiles = finishPrintProfilesFromConfig();
-    renderFinishManualPrint();
     renderFinishPrinterProfiles();
+    loadFinishPrinterStatuses();
   } catch (error) {
     toast(`No se pudo preparar la configuración: ${error.message}`);
   }
@@ -610,27 +614,21 @@ fields.finishPrintConfigModal.addEventListener('click', (event) => {
 });
 
 function closeFinishPrintConfig() {
+  closePrinterErrorModal();
   fields.finishPrintConfigModal.hidden = true;
   collapseFinishPrintSections();
 }
 
 function collapseFinishPrintSections() {
   fields.finishPrintRequirements.hidden = true;
-  fields.finishPrintNowSetup.hidden = true;
   fields.finishPrintSetup.hidden = true;
   $('#toggle-finish-print-requirements').setAttribute('aria-expanded', 'false');
-  $('#toggle-finish-print-now').setAttribute('aria-expanded', 'false');
   $('#toggle-finish-print-setup').setAttribute('aria-expanded', 'false');
 }
 
 $('#toggle-finish-print-requirements').addEventListener('click', () => {
   fields.finishPrintRequirements.hidden = !fields.finishPrintRequirements.hidden;
   $('#toggle-finish-print-requirements').setAttribute('aria-expanded', String(!fields.finishPrintRequirements.hidden));
-});
-
-$('#toggle-finish-print-now').addEventListener('click', () => {
-  fields.finishPrintNowSetup.hidden = !fields.finishPrintNowSetup.hidden;
-  $('#toggle-finish-print-now').setAttribute('aria-expanded', String(!fields.finishPrintNowSetup.hidden));
 });
 
 $('#toggle-finish-print-setup').addEventListener('click', () => {
@@ -640,17 +638,12 @@ $('#toggle-finish-print-setup').addEventListener('click', () => {
 
 fields.finishPrintSetup.addEventListener('click', handleFinishPrintProfileAction);
 fields.finishPrintSetup.addEventListener('change', handleFinishPrintProfileChange);
-$('#refresh-finish-manual').addEventListener('click', refreshFinishManualDiscovery);
-$('#run-selected-finish-print').addEventListener('click', runSelectedFinishPrint);
-fields.finishManualPrinter.addEventListener('change', () => {
-  state.finishPrintManual.printerName = fields.finishManualPrinter.value;
-  state.finishPrintManual.fileId = '';
-  state.finishPrintManual.files = [];
-  renderFinishManualPrint();
-});
-fields.finishManualFile.addEventListener('change', () => {
-  state.finishPrintManual.fileId = fields.finishManualFile.value;
-  renderFinishManualPrint();
+fields.finishPrinterStatusList.addEventListener('click', handleFinishPrinterStatusAction);
+fields.finishPrinterStatusList.addEventListener('change', handleFinishPrinterStatusChange);
+$('#refresh-finish-printer-status').addEventListener('click', () => loadFinishPrinterStatuses({ notify: true }));
+$('#close-printer-error').addEventListener('click', closePrinterErrorModal);
+fields.printerErrorModal.addEventListener('click', (event) => {
+  if (event.target === fields.printerErrorModal) closePrinterErrorModal();
 });
 $('#open-models-config').addEventListener('click', async () => {
   fields.modelsConfigModal.hidden = false;
@@ -1286,8 +1279,10 @@ function finishPrintProfilesFromConfig() {
     printerName: task.printerName || '',
     printerDeviceId: task.printerDeviceId || '',
     printerDeviceName: task.printerDeviceName || '',
+    printerTelemetryId: task.printerTelemetryId || '',
     printerInterName: task.printerInterName || '',
     printerDeviceType: task.printerDeviceType,
+    printerImageUrl: task.printerImageUrl || '',
     cloudFiles: task.cloudFiles || [],
     cloudFileRecords: task.cloudFileRecords || [],
     fileUsageCounts: task.fileUsageCounts || {}
@@ -1300,8 +1295,10 @@ function knownFinishPrinters() {
     name: profile.printerName,
     deviceId: profile.printerDeviceId || '',
     deviceName: profile.printerDeviceName || '',
+    telemetryId: profile.printerTelemetryId || '',
     printerInterName: profile.printerInterName || '',
-    deviceType: profile.printerDeviceType ?? null
+    deviceType: profile.printerDeviceType ?? null,
+    imageUrl: profile.printerImageUrl || ''
   }]));
   for (const printer of state.finishPrintDiscovery.printers) {
     if (printer?.name) printers.set(printer.name, printer);
@@ -1309,78 +1306,280 @@ function knownFinishPrinters() {
   return [...printers.values()];
 }
 
-function renderFinishManualPrint() {
-  const printers = knownFinishPrinters();
-  if (!printers.some((printer) => printer.name === state.finishPrintManual.printerName)) {
-    state.finishPrintManual.printerName = '';
-    state.finishPrintManual.fileId = '';
-    state.finishPrintManual.files = [];
+async function loadFinishPrinterStatuses({ notify = false } = {}) {
+  const button = $('#refresh-finish-printer-status');
+  const section = $('#finish-printer-status-section');
+  if (!fields.finishPrinterStatusList || section?.hidden || button?.disabled) return;
+  if (button) button.disabled = true;
+  fields.finishPrinterStatusList.innerHTML = '<p class="muted finish-printer-empty">Consultando el estado de las impresoras...</p>';
+  try {
+    const result = await apiWhenBrowserAvailable('/api/tasks/finish-print/status', { method: 'POST' }, button);
+    if (result.cancelled) return;
+    if (!result.ok) {
+      fields.finishPrinterStatusList.innerHTML = finishPrinterStatusErrorMarkup(result);
+      if (notify) toast(result.message || errorMessage(result.error, result));
+      return;
+    }
+    state.finishPrintStatuses = result.printers || [];
+    for (const printer of state.finishPrintStatuses) {
+      const known = state.finishPrintDiscovery.printers.find((item) => item.name === printer.printerName);
+      if (known && printer.telemetryId) known.telemetryId = printer.telemetryId;
+      const draft = state.finishPrintDraftProfiles.find((item) => item.printerName === printer.printerName);
+      if (draft && printer.telemetryId) draft.printerTelemetryId = printer.telemetryId;
+      if (draft && printer.imageUrl) draft.printerImageUrl = printer.imageUrl;
+    }
+    renderFinishPrinterStatuses();
+    await loadFinishPrinterStatusFiles({ force: notify, button });
+    if (notify) toast('Estado de impresoras actualizado.');
+  } finally {
+    if (button) button.disabled = false;
   }
-  fields.finishManualPrinter.innerHTML = [
-    '<option value="">Selecciona una impresora</option>',
-    ...printers.map((printer) => `<option value="${escapeHtml(printer.name)}" ${printer.name === state.finishPrintManual.printerName ? 'selected' : ''}>${escapeHtml(printer.name)}</option>`)
-  ].join('');
-
-  if (!state.finishPrintManual.files.some((file) => file.id === state.finishPrintManual.fileId)) {
-    state.finishPrintManual.fileId = '';
-  }
-  fields.finishManualFile.innerHTML = [
-    '<option value="">Selecciona un G-code</option>',
-    ...state.finishPrintManual.files.map((file) => `<option value="${escapeHtml(file.id)}" ${file.id === state.finishPrintManual.fileId ? 'selected' : ''}>${escapeHtml(file.name)}</option>`)
-  ].join('');
-  fields.finishManualFile.disabled = !state.finishPrintManual.printerName || !state.finishPrintManual.files.length;
 }
 
-async function refreshFinishManualDiscovery() {
-  const button = $('#refresh-finish-manual');
-  button.disabled = true;
-  toast('Consultando impresoras y archivos G-code...');
-  try {
-    const printersResult = await apiWhenBrowserAvailable('/api/tasks/finish-print/discover-printers', { method: 'POST' }, button);
-    if (printersResult.cancelled) return;
-    if (!printersResult.ok) return toast(printersResult.message || errorMessage(printersResult.error, printersResult));
-    state.finishPrintDiscovery.printers = printersResult.printers || [];
-    const printers = knownFinishPrinters();
-    if (!printers.some((printer) => printer.name === state.finishPrintManual.printerName)) {
-      state.finishPrintManual.printerName = printers[0]?.name || '';
+async function loadFinishPrinterStatusFiles({ force = false, button } = {}) {
+  const hasInactivePrinter = (state.finishPrintStatuses || []).some((printer) =>
+    printer.connected !== false
+    && Number(printer.state) === 0
+    && !printer.pending
+  );
+  if (!hasInactivePrinter) return;
+  const cached = state.finishPrintStatusFiles;
+  if (!force && cached.files.length && !cached.error) return;
+  state.finishPrintStatusFiles = { files: cached.files || [], loading: true, error: '' };
+  renderFinishPrinterStatuses();
+  const result = await apiWhenBrowserAvailable('/api/tasks/finish-print/discover-library', { method: 'POST' }, button);
+  if (result.cancelled) return;
+  state.finishPrintStatusFiles = result.ok
+    ? { files: result.files || [], loading: false, error: '' }
+    : result.error === 'FINISH_PRINT_GCODES_NOT_FOUND'
+      ? { files: [], loading: false, error: '' }
+      : { files: [], loading: false, error: result.error || 'FINISH_PRINT_GCODE_DISCOVERY_FAILED' };
+  renderFinishPrinterStatuses();
+}
+
+function finishPrinterStatusErrorMarkup(result) {
+  const message = result.message || errorMessage(result.error, result);
+  const diagnostics = result.diagnostics;
+  if (!diagnostics || typeof diagnostics !== 'object') {
+    return `<p class="muted finish-printer-empty">${escapeHtml(message)}</p>`;
+  }
+  const requests = Array.isArray(diagnostics.observedRequests) ? diagnostics.observedRequests : [];
+  const lines = [
+    `Código: ${result.error || 'FINISH_PRINT_STATUS_ERROR'}`,
+    `Página final: ${diagnostics.pageUrl || 'desconocida'}`,
+    `Peticiones API observadas: ${Number(diagnostics.apiRequestCount) || 0}`,
+    `Sesión autenticada detectada: ${diagnostics.authenticatedRequestObserved ? 'sí' : 'no'}`,
+    `Impresoras guardadas disponibles: ${Number(diagnostics.knownPrinterCount) || 0}`
+  ];
+  if (requests.length) {
+    lines.push('', 'Endpoints observados:');
+    for (const request of requests) {
+      const methods = Array.isArray(request.methods) && request.methods.length ? request.methods.join(',') : '-';
+      const statuses = Array.isArray(request.statuses) && request.statuses.length ? request.statuses.join(',') : '-';
+      lines.push(`${methods} ${request.path || '/'} · HTTP ${statuses} · token ${request.hasToken ? 'sí' : 'no'} · usuario ${request.hasUid ? 'sí' : 'no'}`);
     }
-    const printer = printers.find((item) => item.name === state.finishPrintManual.printerName);
-    if (!printer) {
-      state.finishPrintManual.files = [];
-      state.finishPrintManual.fileId = '';
-      renderFinishManualPrint();
-      return toast('No se encontraron impresoras disponibles.');
-    }
-    const filesResult = await apiWhenBrowserAvailable('/api/tasks/finish-print/discover-files', {
-      method: 'POST',
-      body: {
-        printerName: printer.name,
-        printerInterName: printer.printerInterName || '',
-        deviceType: printer.deviceType
-      }
-    }, button);
-    if (filesResult.cancelled) return;
-    if (!filesResult.ok) return toast(filesResult.message || errorMessage(filesResult.error, filesResult));
-    state.finishPrintManual.files = filesResult.files || [];
-    state.finishPrintManual.fileId = state.finishPrintManual.files.some((file) => file.id === state.finishPrintManual.fileId)
-      ? state.finishPrintManual.fileId
+  }
+  return `<div class="finish-printer-status-diagnostic">
+    <p class="muted finish-printer-empty">${escapeHtml(message)}</p>
+    <details><summary>Ver datos de diagnóstico</summary><pre>${escapeHtml(lines.join('\n'))}</pre></details>
+  </div>`;
+}
+
+function renderFinishPrinterStatuses() {
+  const printers = state.finishPrintStatuses || [];
+  if (!printers.length) {
+    fields.finishPrinterStatusList.innerHTML = '<p class="muted finish-printer-empty">No se encontraron impresoras vinculadas.</p>';
+    return;
+  }
+  fields.finishPrinterStatusList.innerHTML = printers.map((printer) => {
+    const progress = Math.min(100, Math.max(0, Number(printer.progress) || 0));
+    const idle = Number(printer.state) === 0;
+    const hasError = printer.state === 3 || Number(printer.printError) > 0 || Boolean(printer.error);
+    const successfullyFinished = Number(printer.state) === 2 && !hasError;
+    const canKill = Boolean(printer.pending);
+    const disconnected = printer.connected === false;
+    const canSelectGcode = !printer.pending && !disconnected && idle;
+    const stateClass = disconnected
+      ? 'is-offline'
+      : hasError
+      ? 'is-error'
+      : printer.active ? 'is-printing' : successfullyFinished ? 'is-success' : 'is-idle';
+    const showProgress = printer.active || successfullyFinished;
+    const progressMarkup = showProgress
+      ? `<span style="width:${progress}%"></span><strong><small>${printer.active ? `Restante: ${escapeHtml(formatDuration(printer.remainingSeconds))}` : 'Finalizada'}</small><b>${Math.round(progress)}%</b></strong>`
+      : '<em>Sin impresión en curso</em>';
+    const pauseLabel = printer.paused ? 'Reanudar impresión' : 'Pausar impresión';
+    const pauseIcon = printer.paused
+      ? '<svg viewBox="0 0 448 512" aria-hidden="true"><path d="M424.4 214.7 72.4 6.6C43.8-10.3 0 6.1 0 47.9V464c0 37.5 40.7 60.6 72.4 41.3l352-208c31.4-18.5 31.5-64.1 0-82.6z"/></svg>'
+      : '<svg viewBox="0 0 320 512" aria-hidden="true"><path d="M48 64C21.5 64 0 85.5 0 112V400c0 26.5 21.5 48 48 48H96c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H48zm176 0c-26.5 0-48 21.5-48 48V400c0 26.5 21.5 48 48 48h48c26.5 0 48-21.5 48-48V112c0-26.5-21.5-48-48-48H224z"/></svg>';
+    const imageUrl = safePrinterImageUrl(printer.imageUrl);
+    const image = imageUrl
+      ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(printer.printerName)}">`
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>';
+    const fileState = state.finishPrintStatusFiles;
+    const files = finishStatusFilesForPrinter(printer.printerName);
+    const selectedFileId = files.some((file) => file.id === state.finishPrintStatusSelections[printer.printerName])
+      ? state.finishPrintStatusSelections[printer.printerName]
       : '';
-    renderFinishManualPrint();
-    toast(`${printersResult.printers.length} impresora(s) y ${state.finishPrintManual.files.length} G-code encontrados.`);
+    const lockedGcodeLabel = printer.gcodeName
+      || (disconnected ? 'Impresora desconectada' : successfullyFinished ? 'Impresión finalizada' : 'Selector no disponible');
+    const selectorEmptyLabel = fileState.loading
+      ? 'Buscando G-code compatibles...'
+      : fileState.error
+        ? 'No se pudieron cargar los G-code'
+        : 'No hay G-code compatibles';
+    const selectorOptions = canSelectGcode
+      ? `<option value="">${files.length ? 'Selecciona un G-code' : selectorEmptyLabel}</option>
+        ${files.map((file) => `<option value="${escapeHtml(file.id)}" ${file.id === selectedFileId ? 'selected' : ''}>${escapeHtml(file.name)}</option>`).join('')}`
+      : `<option value="">${escapeHtml(lockedGcodeLabel)}</option>`;
+    const jobMarkup = `<div class="finish-printer-idle-job">
+      <select data-printer-gcode aria-label="Selecciona un G-code para ${escapeHtml(printer.printerName)}" ${canSelectGcode && files.length && !fileState.loading ? '' : 'disabled'}>
+        ${selectorOptions}
+      </select>
+    </div>`;
+    const canPrint = canSelectGcode && Boolean(selectedFileId);
+    return `<article class="finish-printer-status-card ${stateClass}" data-printer-name="${escapeHtml(printer.printerName)}">
+      <div class="finish-printer-image">${image}</div>
+      <div class="finish-printer-status-content">
+        <div class="finish-printer-status-heading">
+          <div class="finish-printer-status-title"><h4>${escapeHtml(printer.printerName)}</h4><span class="finish-printer-state">${escapeHtml(`${printer.stateLabel || 'No disponible'}${printer.pending && !printer.active ? ' · verificación pendiente' : ''}`)}</span>${hasError ? '<button class="finish-printer-error-badge" type="button" data-printer-error title="Ver detalle del error">Error</button>' : ''}</div>
+          <div class="finish-printer-progress ${showProgress ? '' : 'is-empty'}" ${showProgress ? `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"` : 'role="status"'}>${progressMarkup}</div>
+        </div>
+        <div class="finish-printer-operation-row">
+          ${jobMarkup}
+          <div class="finish-printer-status-actions">
+            <button class="icon-action-button finish-printer-print" type="button" data-printer-print title="Imprimir ahora" aria-label="Imprimir ahora" ${canPrint ? '' : 'disabled'}><svg viewBox="0 0 512 512" aria-hidden="true"><path d="M256 0 32 128v256l224 128 224-128V128L256 0zm0 64 160 91-160 91-160-91L256 64zm-160 147 128 73v137L96 348V211zm192 73 128-73v137l-128 73V284z"/></svg></button>
+            <button class="secondary icon-action-button finish-printer-pause" type="button" data-printer-control="${printer.paused ? 'resume' : 'pause'}" title="${pauseLabel}" aria-label="${pauseLabel}" ${printer.canPause ? '' : 'disabled'}>${pauseIcon}</button>
+            <button class="icon-action-button finish-printer-stop" type="button" data-printer-control="stop" title="Detener impresión" aria-label="Detener impresión" ${printer.canStop ? '' : 'disabled'}><svg viewBox="0 0 448 512" aria-hidden="true"><path d="M0 96C0 43 43 0 96 0H352c53 0 96 43 96 96V416c0 53-43 96-96 96H96c-53 0-96-43-96-96V96z"/></svg></button>
+            <button class="icon-action-button finish-printer-kill" type="button" data-printer-control="kill" title="Eliminar proceso bloqueado" aria-label="Eliminar proceso bloqueado" ${canKill ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a9 9 0 0 0-9 9c0 3.2 1.7 6.1 4.5 7.7V22h3v-2h3v2h3v-3.3A8.9 8.9 0 0 0 21 11a9 9 0 0 0-9-9Zm-3 12a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm6 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm-4.5 3 1.5-2 1.5 2h-3Z"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function finishStatusFilesForPrinter(printerName) {
+  const sources = state.finishPrintStatusFiles.files || [];
+  const files = new Map();
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    const id = String(source.id || source.gcodeId || '').trim();
+    const name = String(source.name || source.fileName || '').trim();
+    if (id && name && !files.has(id)) files.set(id, { ...source, id, name });
+  }
+  return [...files.values()];
+}
+
+function safePrinterImageUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+async function handleFinishPrinterStatusAction(event) {
+  const errorBadge = event.target.closest('[data-printer-error]');
+  if (errorBadge) {
+    const card = errorBadge.closest('[data-printer-name]');
+    const printer = state.finishPrintStatuses.find((item) => item.printerName === card?.dataset.printerName);
+    if (printer) openPrinterErrorModal(printer);
+    return;
+  }
+  const printButton = event.target.closest('[data-printer-print]');
+  if (printButton) {
+    const card = printButton.closest('[data-printer-name]');
+    const printerName = card?.dataset.printerName || '';
+    const fileId = card?.querySelector('[data-printer-gcode]')?.value || '';
+    const printer = knownFinishPrinters().find((item) => item.name === printerName);
+    const file = finishStatusFilesForPrinter(printerName).find((item) => item.id === fileId);
+    if (!printer || !file) return toast('Selecciona un archivo G-code.');
+    await sendSelectedFinishPrint(printer, file, printButton, { refreshStatus: true });
+    return;
+  }
+  const button = event.target.closest('[data-printer-control]');
+  if (!button || button.disabled) return;
+  const card = button.closest('[data-printer-name]');
+  const printerName = card?.dataset.printerName || '';
+  const action = button.dataset.printerControl;
+  const labels = { pause: 'pausar', resume: 'reanudar', stop: 'detener', kill: 'eliminar el proceso pendiente de' };
+  const warning = action === 'kill'
+    ? `¿Quieres eliminar el proceso pendiente de ${printerName}? Esto desbloqueará CC Tools, pero no enviará ninguna orden a la impresora.`
+    : `¿Quieres ${labels[action]} la impresión de ${printerName}?`;
+  if (!confirm(warning)) return;
+  button.disabled = true;
+  try {
+    const result = await api('/api/tasks/finish-print/control', {
+      method: 'POST',
+      body: { printerName, action }
+    });
+    toast(result.ok
+      ? action === 'kill'
+        ? 'Proceso pendiente eliminado y cola de impresiones desbloqueada.'
+        : action === 'stop'
+        ? `Impresión detenida${result.releasedPending ? ' y bloqueo liberado' : ''}.`
+        : `Impresión ${action === 'pause' ? 'pausada' : 'reanudada'}.`
+      : result.message || errorMessage(result.error, result));
+    if (result.ok) await loadFinishPrinterStatuses();
   } finally {
     button.disabled = false;
   }
 }
 
-async function runSelectedFinishPrint() {
-  const button = $('#run-selected-finish-print');
-  state.finishPrintManual.printerName = fields.finishManualPrinter.value;
-  state.finishPrintManual.fileId = fields.finishManualFile.value;
-  const printer = knownFinishPrinters().find((item) => item.name === state.finishPrintManual.printerName);
-  const file = state.finishPrintManual.files.find((item) => item.id === state.finishPrintManual.fileId);
-  if (!printer) return toast('Selecciona una impresora.');
-  if (!file) return toast('Selecciona un archivo G-code.');
+function handleFinishPrinterStatusChange(event) {
+  const select = event.target.closest('[data-printer-gcode]');
+  if (!select) return;
+  const card = select.closest('[data-printer-name]');
+  const printerName = card?.dataset.printerName || '';
+  state.finishPrintStatusSelections[printerName] = select.value;
+  const button = card?.querySelector('[data-printer-print]');
+  if (button) button.disabled = !select.value;
+}
 
+function openPrinterErrorModal(printer) {
+  const code = Number(printer.printError) > 0 ? String(printer.printError) : String(printer.error || 'No disponible');
+  const reportedDetail = String(printer.printErrorDetail || printer.error || '').trim();
+  const hasDescription = reportedDetail && !/^Código de error:/i.test(reportedDetail);
+  const stateLabel = printer.stateLabel || 'No disponible';
+  const summary = hasDescription
+    ? reportedDetail
+    : Number(printer.state) === 2
+      ? 'La impresión figura como finalizada, pero Creality Cloud también ha comunicado una incidencia.'
+      : 'La impresora ha comunicado una incidencia durante la impresión.';
+  const guidance = hasDescription
+    ? 'Revisa la pantalla de la impresora antes de continuar o enviar otro trabajo.'
+    : `Creality Cloud solo ha devuelto el código técnico ${code}, sin una descripción de la causa. Revisa la pantalla de la impresora o el Banco de trabajo para identificarla.`;
+  const details = [
+    `Código técnico: ${code}`,
+    `Estado interno: ${stateLabel} (${printer.state ?? '-'})`,
+    `G-code: ${printer.gcodeName || 'No disponible'}`,
+    `ID de impresión: ${printer.printId || 'No disponible'}`,
+    `Última telemetría: ${printer.diagnostics?.lastTelemetryUpdate || 'No disponible'}`
+  ];
+  fields.printerErrorName.textContent = printer.printerName || 'Impresora';
+  fields.printerErrorMessage.textContent = summary;
+  fields.printerErrorGuidance.textContent = guidance;
+  fields.printerErrorState.textContent = stateLabel;
+  fields.printerErrorGcode.textContent = printer.gcodeName || 'No disponible';
+  fields.printerErrorObserved.textContent = formatPrinterTelemetryTime(printer.diagnostics?.lastTelemetryUpdate);
+  fields.printerErrorDetails.textContent = details.join('\n');
+  fields.printerErrorModal.hidden = false;
+}
+
+function formatPrinterTelemetryTime(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 'No disponible';
+  const milliseconds = numeric < 1e12 ? numeric * 1000 : numeric;
+  return formatDate(milliseconds);
+}
+
+function closePrinterErrorModal() {
+  fields.printerErrorModal.hidden = true;
+}
+
+async function sendSelectedFinishPrint(printer, file, button, { refreshStatus = false } = {}) {
   button.disabled = true;
   toast(`Enviando ${file.name} a ${printer.name}...`);
   try {
@@ -1391,7 +1590,10 @@ async function runSelectedFinishPrint() {
     toast(result.ok
       ? result.message || 'Trabajo de impresión iniciado.'
       : result.message || errorMessage(result.error, result));
-    if (result.ok) await refresh();
+    if (result.ok) {
+      await refresh();
+      if (refreshStatus) await loadFinishPrinterStatuses();
+    }
   } finally {
     button.disabled = false;
   }
@@ -1419,8 +1621,10 @@ function addFinishPrinterProfile() {
     printerName,
     printerDeviceId: printer.deviceId || '',
     printerDeviceName: printer.deviceName || '',
+    printerTelemetryId: printer.telemetryId || '',
     printerInterName: printer.printerInterName || '',
     printerDeviceType: printer.deviceType ?? null,
+    printerImageUrl: printer.imageUrl || '',
     cloudFiles: [],
     cloudFileRecords: [],
     fileUsageCounts: {}
@@ -1433,6 +1637,8 @@ function addFinishPrinterProfile() {
 
 function renderFinishPrinterProfiles() {
   const profiles = state.finishPrintDraftProfiles;
+  const statusSection = $('#finish-printer-status-section');
+  if (statusSection) statusSection.hidden = profiles.length === 0;
   const configuredNames = new Set(profiles.map((profile) => profile.printerName));
   const availablePrinters = state.finishPrintDiscovery.printers.filter((printer) => !configuredNames.has(printer.name));
   if (!availablePrinters.some((printer) => printer.name === state.finishPrintPrinterPicker)) {
@@ -1539,8 +1745,10 @@ function collectFinishPrinterProfiles() {
       printerName,
       printerDeviceId: printer.deviceId || printer.printerDeviceId || '',
       printerDeviceName: printer.deviceName || printer.printerDeviceName || '',
+      printerTelemetryId: printer.telemetryId || printer.printerTelemetryId || '',
       printerInterName: printer.printerInterName || '',
       printerDeviceType: printer.deviceType ?? printer.printerDeviceType ?? null,
+      printerImageUrl: printer.imageUrl || printer.printerImageUrl || '',
       windowStart: card.querySelector('[data-finish-profile-field="windowStart"]').value,
       windowEnd: card.querySelector('[data-finish-profile-field="windowEnd"]').value,
       dailyLimit: Number(card.querySelector('[data-finish-profile-field="dailyLimit"]').value),

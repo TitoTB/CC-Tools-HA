@@ -27,7 +27,8 @@ import { sendTelegram } from './telegram.js';
 import { browserManagerState, shutdownBrowser, withAutomationBrowser } from './browserManager.js';
 import { buildHealthMetrics } from './healthMetrics.js';
 import { mergePointsState, readPointsSummary } from './pointsCounter.js';
-import { discoverGcodeFiles, discoverPrinters } from './finishPrintDiscovery.js';
+import { discoverGcodeFiles, discoverGcodeLibrary, discoverPrinters } from './finishPrintDiscovery.js';
+import { controlPrinter, readPrinterStatuses } from './finishPrintStatus.js';
 import {
   recoverStalePendingFinishPrint,
   startFinishPrintMonitor,
@@ -421,6 +422,189 @@ app.post('/api/tasks/finish-print/discover-files', async (req, res) => {
   }
 });
 
+app.post('/api/tasks/finish-print/discover-library', async (req, res) => {
+  try {
+    const files = await discoverGcodeLibrary();
+    res.json({ ok: true, files });
+  } catch (error) {
+    res.status(409).json({ ok: false, error: error.code || error.message, message: error.message });
+  }
+});
+
+app.post('/api/tasks/finish-print/status', async (req, res) => {
+  try {
+    const config = await readConfig();
+    const task = config.tasks.finishPrint;
+    const profiles = normalizeFinishPrintProfiles(task);
+    const statuses = await readPrinterStatuses(finishPrintKnownPrinters(profiles, task));
+    let changed = false;
+    for (const status of statuses) {
+      const profile = profiles.find((item) => item.printerName === status.printerName
+        || (item.printerDeviceName && item.printerDeviceName === status.deviceName));
+      if (profile) {
+        status.printerProfileId = profile.id;
+        if (status.telemetryId && profile.printerTelemetryId !== status.telemetryId) {
+          profile.printerTelemetryId = status.telemetryId;
+          changed = true;
+        }
+        if (status.deviceName && profile.printerDeviceName !== status.deviceName) {
+          profile.printerDeviceName = status.deviceName;
+          changed = true;
+        }
+        if (status.imageUrl && profile.printerImageUrl !== status.imageUrl) {
+          profile.printerImageUrl = status.imageUrl;
+          changed = true;
+        }
+      }
+      const pending = task.pendingVerification;
+      status.pending = Boolean(pending?.printId && (
+        pending.printId === status.printId
+        || pending.printerProfileId === status.printerProfileId
+        || pending.printerName === status.printerName
+      ));
+      if (status.pending) {
+        status.canStop = Boolean(status.telemetryId);
+        if (!status.gcodeName) status.gcodeName = pending.file?.name || '';
+      }
+    }
+    if (changed) {
+      task.printerProfiles = profiles;
+      await writeConfig(config);
+    }
+    res.json({ ok: true, printers: statuses, pendingVerification: task.pendingVerification || null });
+  } catch (error) {
+    res.status(409).json({
+      ok: false,
+      error: error.code || error.message,
+      message: error.message,
+      diagnostics: error.diagnostics || null
+    });
+  }
+});
+
+app.post('/api/tasks/finish-print/control', async (req, res) => {
+  const action = String(req.body?.action || '').trim();
+  const printerName = String(req.body?.printerName || '').trim();
+  try {
+    const config = await readConfig();
+    if (action === 'kill') {
+      const task = config.tasks.finishPrint;
+      const pending = task.pendingVerification;
+      if (!pending?.printId || (pending.printerName && pending.printerName !== printerName)) {
+        return res.status(409).json({
+          ok: false,
+          error: 'FINISH_PRINT_PROCESS_NOT_FOUND',
+          message: 'No hay ningún proceso pendiente de esta impresora que se pueda eliminar.'
+        });
+      }
+      const finishedAt = new Date().toISOString();
+      task.pendingVerification = null;
+      task.lastRunAt = finishedAt;
+      task.lastStatus = 'failed';
+      task.lastMessage = `Proceso de impresión eliminado manualmente: ${pending.file?.name || pending.printId}.`;
+      await writeConfig(config);
+      await appendRun({
+        taskId: 'finishPrint',
+        source: 'manual',
+        status: 'failed',
+        message: task.lastMessage,
+        finishedAt,
+        details: {
+          controlAction: 'kill',
+          printerName,
+          printId: pending.printId,
+          releasedPending: true,
+          file: pending.file || {}
+        }
+      });
+      return res.json({ ok: true, action, printerName, killed: true, releasedPending: true });
+    }
+    const profiles = normalizeFinishPrintProfiles(config.tasks.finishPrint);
+    const result = await controlPrinter({
+      printerName,
+      action,
+      knownPrinters: finishPrintKnownPrinters(profiles, config.tasks.finishPrint)
+    });
+    const pending = config.tasks.finishPrint.pendingVerification;
+    let releasedPending = false;
+    if (action === 'stop' && pending?.printId && (
+      pending.printId === result.printId || pending.printerName === result.printerName
+    )) {
+      config.tasks.finishPrint.pendingVerification = null;
+      config.tasks.finishPrint.lastRunAt = new Date().toISOString();
+      config.tasks.finishPrint.lastStatus = 'failed';
+      config.tasks.finishPrint.lastMessage = `Impresión detenida manualmente: ${pending.file?.name || result.printId || result.printerName}.`;
+      releasedPending = true;
+      await writeConfig(config);
+      await appendRun({
+        taskId: 'finishPrint',
+        source: 'manual',
+        status: 'failed',
+        message: config.tasks.finishPrint.lastMessage,
+        finishedAt: config.tasks.finishPrint.lastRunAt,
+        details: {
+          controlAction: 'stop',
+          printerName: result.printerName,
+          printId: result.printId,
+          stateBefore: result.stateBefore,
+          stateBeforeLabel: result.stateBeforeLabel,
+          controlResponses: result.responses,
+          releasedPending: true,
+          file: pending.file || {}
+        }
+      });
+    }
+    if (action === 'stop' && !releasedPending) {
+      await appendRun({
+        taskId: 'finishPrint',
+        source: 'manual',
+        status: 'failed',
+        message: `Impresión detenida manualmente en ${result.printerName}.`,
+        finishedAt: new Date().toISOString(),
+        details: {
+          controlAction: 'stop',
+          printerName: result.printerName,
+          printId: result.printId,
+          stateBefore: result.stateBefore,
+          stateBeforeLabel: result.stateBeforeLabel,
+          controlResponses: result.responses,
+          releasedPending: false
+        }
+      });
+    }
+    res.json({ ok: true, ...result, releasedPending });
+  } catch (error) {
+    const message = error.message || 'No se pudo controlar la impresora.';
+    await appendRun({
+      taskId: 'finishPrint',
+      source: 'manual',
+      status: 'error',
+      message,
+      finishedAt: new Date().toISOString(),
+      details: {
+        controlAction: action,
+        printerName,
+        failures: [{
+          title: printerName || 'Impresora',
+          error: message,
+          diagnostic: {
+            code: error.code || 'FINISH_PRINT_CONTROL_FAILED',
+            category: 'technical',
+            message,
+            technical: { action, printerName, ...(error.diagnostics || {}) }
+          }
+        }]
+      }
+    }).catch(() => {});
+    res.status(409).json({
+      ok: false,
+      error: error.code || error.message,
+      message: error.message,
+      diagnostics: error.diagnostics || null
+    });
+  }
+});
+
 app.post('/api/tasks/finish-print/run', async (req, res) => {
   try {
     const result = await runTaskNow('finishPrint', 'manual');
@@ -433,6 +617,26 @@ app.post('/api/tasks/finish-print/run', async (req, res) => {
     });
   }
 });
+
+function finishPrintKnownPrinters(profiles, task = {}) {
+  const fallbackGcodeId = String(
+    task.pendingVerification?.file?.id
+    || task.cloudFileRecords?.find?.((file) => file?.id)?.id
+    || ''
+  ).trim();
+  return (Array.isArray(profiles) ? profiles : []).map((profile) => ({
+    name: profile.printerName,
+    deviceId: profile.printerDeviceId,
+    deviceName: profile.printerDeviceName,
+    telemetryId: profile.printerTelemetryId,
+    model: profile.printerInterName,
+    imageUrl: profile.printerImageUrl,
+    deviceType: profile.printerDeviceType,
+    authenticationGcodeId: String(
+      profile.cloudFileRecords?.find?.((file) => file?.id)?.id || fallbackGcodeId
+    ).trim()
+  }));
+}
 
 app.post('/api/tasks/finish-print/run-selected', async (req, res) => {
   try {

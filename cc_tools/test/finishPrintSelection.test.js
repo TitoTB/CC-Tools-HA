@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildGcodeLibraryPayload,
   buildGcodeOwnerListPayload,
   buildGcodeQueryPayload,
   forwardAuthenticationHeaders,
@@ -36,16 +37,16 @@ test('extrae impresoras de la respuesta estructurada del Banco de trabajo', () =
         id: 'group-1',
         name: 'Sin grupo',
         deviceList: [
-          { deviceId: 'printer-1', aliasName: 'OctoPrint Virtual', deviceName: 'Ender-3' },
-          { dn: 'printer-2', nickName: 'Taller', model: 'K1' }
+          { deviceId: 'printer-1', aliasName: 'OctoPrint Virtual', deviceName: 'Ender-3', connect: 1, idleState: 0, deviceType: { imageUrl: '//cdn.crealitycloud.com/printers/ender.png' } },
+          { dn: 'printer-2', nickName: 'Taller', model: 'K1', connect: 0, idleState: 0 }
         ]
       }]
     }
   });
 
   assert.deepEqual(printers, [
-    { name: 'OctoPrint Virtual', deviceId: 'printer-1', deviceName: 'Ender-3', model: 'Ender-3', printerInterName: 'Ender-3', deviceType: null },
-    { name: 'Taller', deviceId: 'printer-2', deviceName: 'printer-2', model: 'K1', printerInterName: 'K1', deviceType: null }
+    { name: 'OctoPrint Virtual', deviceId: 'printer-1', deviceName: 'Ender-3', telemetryId: '', deviceState: null, connectionState: 1, idleState: 0, model: 'Ender-3', imageUrl: 'https://cdn.crealitycloud.com/printers/ender.png', printerInterName: 'Ender-3', deviceType: null },
+    { name: 'Taller', deviceId: 'printer-2', deviceName: 'printer-2', telemetryId: '', deviceState: null, connectionState: 0, idleState: 0, model: 'K1', imageUrl: '', printerInterName: 'K1', deviceType: null }
   ]);
 });
 
@@ -58,7 +59,7 @@ test('extrae impresoras de la lista limitada del Banco de trabajo', () => {
     result: {
       deviceCount: 2,
       limitList: [
-        { id: 'record-1', deviceId: 1709971, aliasName: 'Ender 3 V3 SE', deviceName: 'device-one', model: 'Ender-3 V3 SE', type: 5, deviceType: { internalName: 'Ender-3 V3 SE' } },
+        { id: 'record-1', deviceId: 1709971, tbId: 'tb-one', deviceState: 1, connect: 1, idleState: 1, aliasName: 'Ender 3 V3 SE', deviceName: 'device-one', model: 'Ender-3 V3 SE', type: 5, deviceType: { internalName: 'Ender-3 V3 SE' } },
         { id: 'record-2', deviceId: 1752391, aliasName: 'Ender 3', deviceName: 'device-two', model: 'Ender-3', type: 5, deviceType: { internalName: 'Ender-3' } }
       ]
     },
@@ -66,8 +67,8 @@ test('extrae impresoras de la lista limitada del Banco de trabajo', () => {
   });
 
   assert.deepEqual(printers, [
-    { name: 'Ender 3 V3 SE', deviceId: '1709971', deviceName: 'device-one', model: 'Ender-3 V3 SE', printerInterName: 'Ender-3 V3 SE', deviceType: 5 },
-    { name: 'Ender 3', deviceId: '1752391', deviceName: 'device-two', model: 'Ender-3', printerInterName: 'Ender-3', deviceType: 5 }
+    { name: 'Ender 3 V3 SE', deviceId: '1709971', deviceName: 'device-one', telemetryId: 'tb-one', deviceState: 1, connectionState: 1, idleState: 1, model: 'Ender-3 V3 SE', imageUrl: '', printerInterName: 'Ender-3 V3 SE', deviceType: 5 },
+    { name: 'Ender 3', deviceId: '1752391', deviceName: 'device-two', telemetryId: '', deviceState: null, connectionState: null, idleState: null, model: 'Ender-3', imageUrl: '', printerInterName: 'Ender-3', deviceType: 5 }
   ]);
 });
 
@@ -115,6 +116,11 @@ test('reproduce los parámetros aceptados por la consulta oficial de G-code', ()
     deviceType: 5,
     isUpload: true
   });
+});
+
+test('consulta la galería completa con la paginación oficial', () => {
+  assert.deepEqual(buildGcodeLibraryPayload(2), { page: 2, pageSize: 12 });
+  assert.deepEqual(buildGcodeLibraryPayload(0), { page: 1, pageSize: 12 });
 });
 
 test('reproduce la paginación oficial de G-code compatibles y alternativos', () => {

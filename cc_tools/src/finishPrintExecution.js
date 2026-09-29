@@ -68,16 +68,46 @@ export function parsePrintRecord(response) {
   }
   const record = response.result;
   const printState = Number(record.printState);
+  const printError = Number(record.printErr || 0);
+  const printErrorDetail = [
+    record.errorMessage,
+    record.errorMsg,
+    record.errMsg,
+    record.errorDesc,
+    record.errDesc,
+    record.failReason
+  ].map((value) => String(value || '').trim()).find(Boolean) || '';
+  const printStartTime = Number(record.printStartTime || 0);
+  const printEndTime = Number(record.printEndTime || 0);
+  const failed = [3, 4].includes(printState) || printError > 0;
+  const completed = !failed && printEndTime > 0 && printEndTime >= printStartTime && ![1, 5].includes(printState);
   return {
     printId: String(record.id || '').trim(),
     gcodeId: String(record.gcodeId || '').trim(),
     name: String(record.name || record.gcodeInfo?.name || '').trim(),
     printState,
-    printError: Number(record.printErr || 0),
+    printError,
+    printErrorDetail,
     printJobTime: Number(record.printJobTime || 0),
-    printStartTime: Number(record.printStartTime || 0),
-    printEndTime: Number(record.printEndTime || 0),
-    completed: printState === 2 && Number(record.printEndTime || 0) > 0
+    printStartTime,
+    printEndTime,
+    completed,
+    failed,
+    active: [1, 5].includes(printState),
+    paused: printState === 5,
+    stateLabel: ({ 0: 'En reposo', 1: 'Imprimiendo', 2: 'Finalizada', 3: 'Error', 4: 'Detenida', 5: 'Pausada' })[printState]
+      || `Estado ${Number.isFinite(printState) ? printState : 'desconocido'}`,
+    diagnostics: {
+      printState,
+      printError,
+      printErrorDetail,
+      printStartTime,
+      printEndTime,
+      printJobTime: Number(record.printJobTime || 0),
+      deviceName: String(record.deviceName || record.dn || '').trim(),
+      deviceType: record.deviceType ?? null,
+      model: String(record.model || '').trim()
+    }
   };
 }
 
@@ -147,6 +177,9 @@ export function verifyVirtualPrint({ printId, gcodeId, rewardBefore, timezone = 
         authenticationHeaders
       );
       const printRecord = parsePrintRecord(response);
+      if (printRecord.failed) {
+        return { status: 'failed', printRecord };
+      }
       if (!printRecord.completed) {
         return { status: 'printing', printRecord };
       }

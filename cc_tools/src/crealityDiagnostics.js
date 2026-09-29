@@ -86,7 +86,6 @@ export async function inspectCrealityPage(page, observer, options = {}) {
   const bodyText = normalize(await page?.locator?.('body')?.innerText({ timeout: 2500 }).catch(() => '') || '');
   const frameUrls = page?.frames?.().map((frame) => frame.url()).filter(Boolean).slice(-10) || [];
   const visibleSecurityChallenge = await hasVisibleSecurityChallenge(page);
-  const securityText = `${title} ${bodyText.slice(0, 2000)}`;
   const securityLocation = SECURITY_URL_RE.test(url)
     || frameUrls.some((frameUrl) => ACTIVE_SECURITY_FRAME_RE.test(frameUrl));
   const rateLimit = responses.find((entry) => entry.status === 429);
@@ -101,7 +100,7 @@ export async function inspectCrealityPage(page, observer, options = {}) {
       });
   }
 
-  if (challengeResponse || securityLocation || visibleSecurityChallenge || SECURITY_TEXT_RE.test(securityText)) {
+  if (challengeResponse || securityLocation || visibleSecurityChallenge || hasStandaloneSecurityText(title, bodyText)) {
     return diagnostic('SECURITY_CHALLENGE', 'security', true,
       'Creality Cloud ha mostrado una verificación de seguridad.', { url, title, responses, frameUrls });
   }
@@ -134,6 +133,12 @@ export async function inspectCrealityPage(page, observer, options = {}) {
   }
 
   return null;
+}
+
+function hasStandaloneSecurityText(title, bodyText) {
+  if (SECURITY_TEXT_RE.test(String(title || ''))) return true;
+  const text = String(bodyText || '');
+  return text.length <= 1200 && SECURITY_TEXT_RE.test(text);
 }
 
 export async function diagnoseTaskError(error, page, observer, fallback = {}) {

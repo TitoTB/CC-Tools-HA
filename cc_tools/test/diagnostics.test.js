@@ -135,6 +135,22 @@ test('una ficha normal no falla aunque el observador haya visto el script de Clo
   assert.equal(await inspectCrealityPage(page, observer, { requireBody: true }), null);
 });
 
+test('una tarjeta externa con Just a moment no convierte una ficha normal en desafío', async () => {
+  const page = fakePage({
+    url: 'https://www.crealitycloud.com/es/model-detail/loki-3dprint-solutions?source=2',
+    title: 'Loki | Creality Cloud',
+    body: [
+      'Loki user6278224487 Seguir Configuración de impresión Ver archivos STL/CAD',
+      'Descripción Cuernos del Presidente Loki Original Just a moment...',
+      'Comentarios Licencia Etiquetas Modelos relacionados',
+      'Contenido adicional de una ficha cargada correctamente. '.repeat(35)
+    ].join(' ')
+  });
+  const observer = { snapshot: async () => [] };
+
+  assert.equal(await inspectCrealityPage(page, observer, { requireBody: true }), null);
+});
+
 test('reconoce la respuesta funcional de un modelo rechazado por revisión', () => {
   assert.equal(isModelReviewFailureResponse({
     url: 'https://www.crealitycloud.com/api/cxy/v3/model/modelGroupDetail',

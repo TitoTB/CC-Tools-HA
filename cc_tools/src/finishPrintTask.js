@@ -11,11 +11,22 @@ export async function startVirtualPrint(taskConfig = {}) {
     .find((record) => record.name === selection.file);
 
   if (taskConfig.pendingVerification?.printId) {
-    throw printTaskError(
+    const error = printTaskError(
       'FINISH_PRINT_VERIFICATION_PENDING',
       'Hay una impresión pendiente de finalizar y verificar.',
       file
     );
+    error.technical = JSON.stringify({
+      printId: taskConfig.pendingVerification.printId,
+      printerProfileId: taskConfig.pendingVerification.printerProfileId || '',
+      printerName: taskConfig.pendingVerification.printerName || '',
+      startedAt: taskConfig.pendingVerification.startedAt || '',
+      lastCheckedAt: taskConfig.pendingVerification.lastCheckedAt || '',
+      nextCheckAt: taskConfig.pendingVerification.nextCheckAt || '',
+      verificationError: taskConfig.pendingVerification.verificationError || '',
+      printRecord: taskConfig.pendingVerification.printRecord || null
+    });
+    throw error;
   }
   if (!selection.file) {
     throw printTaskError(
@@ -73,6 +84,7 @@ export function manualVirtualPrintConfig(taskConfig = {}, selection = {}) {
     printerName,
     printerDeviceId: String(printer.deviceId || '').trim(),
     printerDeviceName,
+    printerTelemetryId: String(printer.telemetryId || '').trim(),
     printerInterName: String(printer.printerInterName || '').trim(),
     printerDeviceType: printer.deviceType ?? null,
     cloudFiles: [file.name],

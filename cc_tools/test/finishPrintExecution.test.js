@@ -52,11 +52,53 @@ test('detecta una impresión oficialmente finalizada', () => {
     name: 'Prueba.gcode',
     printState: 2,
     printError: 0,
+    printErrorDetail: '',
     printJobTime: 730,
     printStartTime: 100,
     printEndTime: 830,
-    completed: true
+    completed: true,
+    failed: false,
+    active: false,
+    paused: false,
+    stateLabel: 'Finalizada',
+    diagnostics: {
+      printState: 2,
+      printError: 0,
+      printErrorDetail: '',
+      printStartTime: 100,
+      printEndTime: 830,
+      printJobTime: 730,
+      deviceName: '',
+      deviceType: null,
+      model: ''
+    }
   });
+});
+
+test('identifica estados pausados, detenidos y finales alternativos', () => {
+  const paused = parsePrintRecord({ code: 0, result: { id: 'one', printState: 5, printEndTime: 0 } });
+  assert.equal(paused.active, true);
+  assert.equal(paused.paused, true);
+  assert.equal(paused.completed, false);
+
+  const stopped = parsePrintRecord({ code: 0, result: { id: 'two', printState: 4, printErr: 1 } });
+  assert.equal(stopped.failed, true);
+  assert.equal(stopped.completed, false);
+
+  const alternate = parsePrintRecord({
+    code: 0,
+    result: { id: 'three', printState: 0, printStartTime: 100, printEndTime: 200 }
+  });
+  assert.equal(alternate.completed, true);
+});
+
+test('conserva la descripción del error devuelta por Creality Cloud', () => {
+  const record = parsePrintRecord({
+    code: 0,
+    result: { id: 'failed', printState: 3, printErr: 17, failReason: 'Filamento agotado' }
+  });
+  assert.equal(record.printError, 17);
+  assert.equal(record.printErrorDetail, 'Filamento agotado');
 });
 
 test('solo acepta un G-code marcado como imprimible', () => {

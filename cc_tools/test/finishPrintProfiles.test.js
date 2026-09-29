@@ -11,6 +11,7 @@ import {
 test('migrates the legacy printer configuration into the first profile', () => {
   const profiles = normalizeFinishPrintProfiles({
     printerName: 'Ender 3',
+    printerTelemetryId: 'tb-1',
     windowStart: '09:00',
     windowEnd: '18:00',
     dailyLimit: 3,
@@ -21,6 +22,7 @@ test('migrates the legacy printer configuration into the first profile', () => {
   assert.equal(profiles.length, 1);
   assert.equal(profiles[0].id, 'printer-1');
   assert.equal(profiles[0].printerName, 'Ender 3');
+  assert.equal(profiles[0].printerTelemetryId, 'tb-1');
   assert.equal(profiles[0].dailyLimit, 3);
   assert.equal(profiles[0].printMode, 'random');
   assert.deepEqual(profiles[0].cloudFiles, ['pieza.gcode']);

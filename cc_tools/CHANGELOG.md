@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.13
+
+- Añade el panel Mis impresoras con conectividad, estado, progreso y detalle de errores en tiempo real.
+- Permite pausar, reanudar y detener impresiones, además de liberar procesos bloqueados cuando sea necesario.
+- Incorpora el envío manual desde cada impresora inactiva utilizando la galería completa de G-code.
+- Distingue correctamente entre impresoras inactivas, desconectadas, imprimiendo y finalizadas sin arrastrar datos antiguos.
+- Evita confundir contenido externo incrustado con una verificación de seguridad de Creality Cloud.
+- Elimina el bloque manual duplicado Realizar impresión.
+
 ## 1.0.12
 
 - Corrige las conversiones de puntos Spotlight en el historial sin mezclar el encabezado y los filtros de Creality Cloud.
