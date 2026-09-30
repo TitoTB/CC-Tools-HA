@@ -44,6 +44,15 @@ test('combina las impresoras observadas con los identificadores guardados', () =
   }]);
 });
 
+test('mantiene separadas dos impresoras del mismo modelo con nombres e IDs distintos', () => {
+  const printers = mergeKnownPrinters([
+    { name: 'Raspberry', deviceName: 'Ender-3', deviceId: 'printer-1', connectionState: 1 },
+    { name: 'Raspberry-2', deviceName: 'Ender-3', deviceId: 'printer-2', connectionState: 1 }
+  ]);
+  assert.deepEqual(printers.map((printer) => printer.name), ['Raspberry', 'Raspberry-2']);
+  assert.deepEqual(printers.map((printer) => printer.deviceId), ['printer-1', 'printer-2']);
+});
+
 test('normaliza atributos y selecciona la muestra temporal más reciente', () => {
   assert.deepEqual(recordsByKey({ length: 0 }), {});
   assert.deepEqual(recordsByKey([{ key: 'state', value: 5 }, { key: 'printId', value: 'print-1' }]), {

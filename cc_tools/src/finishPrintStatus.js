@@ -264,21 +264,26 @@ async function withPrinterSession(callback, knownPrinters = [], options = {}) {
 }
 
 export function mergeKnownPrinters(observed = [], known = []) {
-  const printers = new Map();
+  const printers = [];
   for (const source of [known, observed]) {
     for (const printer of Array.isArray(source) ? source : []) {
       const name = String(printer?.name || printer?.printerName || '').trim();
       const deviceName = String(printer?.deviceName || printer?.printerDeviceName || '').trim();
       if (!name && !deviceName) continue;
-      const key = deviceName || name;
-      const previous = printers.get(key) || {};
       const deviceId = String(printer?.deviceId || printer?.printerDeviceId || '').trim();
       const telemetryId = String(printer?.telemetryId || printer?.printerTelemetryId || '').trim();
+      const index = printers.findIndex((candidate) => printerRecordsMatch(candidate, {
+        name,
+        deviceName,
+        deviceId,
+        telemetryId
+      }));
+      const previous = index >= 0 ? printers[index] : {};
       const imageUrl = String(printer?.imageUrl || printer?.printerImageUrl || '').trim();
       const deviceState = finiteNumber(printer?.deviceState, previous.deviceState, null);
       const connectionState = finiteNumber(printer?.connectionState, previous.connectionState, null);
       const idleState = finiteNumber(printer?.idleState, previous.idleState, null);
-      printers.set(key, {
+      const merged = {
         ...previous,
         ...printer,
         name: name || deviceName,
@@ -289,10 +294,27 @@ export function mergeKnownPrinters(observed = [], known = []) {
         deviceState,
         connectionState,
         idleState
-      });
+      };
+      if (index >= 0) printers[index] = merged;
+      else printers.push(merged);
     }
   }
-  return [...printers.values()];
+  return printers;
+}
+
+function printerRecordsMatch(candidate = {}, current = {}) {
+  const candidateDeviceId = String(candidate.deviceId || '').trim();
+  const candidateTelemetryId = String(candidate.telemetryId || '').trim();
+  if (candidateDeviceId && current.deviceId && candidateDeviceId === current.deviceId) return true;
+  if (candidateTelemetryId && current.telemetryId && candidateTelemetryId === current.telemetryId) return true;
+  const candidateName = String(candidate.name || '').trim();
+  const candidateDeviceName = String(candidate.deviceName || '').trim();
+  return Boolean(
+    candidateName
+    && current.name
+    && candidateName === current.name
+    && candidateDeviceName === current.deviceName
+  );
 }
 
 export function printerSessionTargetUrl(knownPrinters = []) {

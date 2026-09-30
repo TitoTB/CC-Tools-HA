@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.15
+
+- Detecta todas las impresoras combinando las dos respuestas del Banco de trabajo.
+- Mantiene separadas varias impresoras del mismo modelo mediante sus identificadores únicos.
+
 ## 1.0.14
 
 - Reconoce los cupones canjeados como disponibles y abre la tienda con el descuento precargado.

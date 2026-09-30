@@ -15,18 +15,22 @@ export function discoverPrinters() {
     const deviceListResponse = waitForEndpoint(page, LIMIT_DEVICE_LIST_PATH);
     const deviceGroupsResponse = waitForDeviceGroups(page);
     await page.goto(WORKBENCH_URL, { waitUntil: 'domcontentloaded' });
-    const response = await deviceListResponse;
     await page.waitForTimeout(1500);
     ensureWorkbenchSession(page, await collectSurfaceText(page));
 
-    const payload = await response?.json().catch(() => null);
-    const responsePrinters = parsePrinterResponse(payload);
+    const [response, groupsResponse] = await Promise.all([
+      settleWithin(deviceListResponse, 2500),
+      settleWithin(deviceGroupsResponse, 2500)
+    ]);
+    const [payload, groupsPayload] = await Promise.all([
+      response?.json().catch(() => null),
+      groupsResponse?.json().catch(() => null)
+    ]);
+    const responsePrinters = mergeDiscoveredPrinters([
+      ...parsePrinterResponse(payload),
+      ...parsePrinterResponse(groupsPayload)
+    ]);
     if (responsePrinters.length) return responsePrinters;
-
-    const groupsResponse = await deviceGroupsResponse;
-    const groupsPayload = await groupsResponse?.json().catch(() => null);
-    const groupedPrinters = parsePrinterResponse(groupsPayload);
-    if (groupedPrinters.length) return groupedPrinters;
 
     const sources = await collectTextSources(page);
     const printers = parsePrinterNames(sources.join('\n'));
@@ -185,6 +189,38 @@ export function parsePrinterResponse(payload) {
   }
 
   return [...unique.values()];
+}
+
+export function mergeDiscoveredPrinters(printers = []) {
+  const merged = [];
+  for (const printer of Array.isArray(printers) ? printers : []) {
+    if (!printer || typeof printer !== 'object') continue;
+    const deviceId = String(printer.deviceId || '').trim();
+    const telemetryId = String(printer.telemetryId || '').trim();
+    const name = String(printer.name || '').trim();
+    const deviceName = String(printer.deviceName || '').trim();
+    const index = merged.findIndex((candidate) => {
+      const candidateDeviceId = String(candidate.deviceId || '').trim();
+      const candidateTelemetryId = String(candidate.telemetryId || '').trim();
+      if (deviceId && candidateDeviceId) return deviceId === candidateDeviceId;
+      if (telemetryId && candidateTelemetryId) return telemetryId === candidateTelemetryId;
+      return Boolean(name && deviceName && name === candidate.name && deviceName === candidate.deviceName);
+    });
+    if (index < 0) {
+      merged.push({ ...printer });
+      continue;
+    }
+    merged[index] = mergePrinterFields(merged[index], printer);
+  }
+  return merged;
+}
+
+function mergePrinterFields(previous, current) {
+  const result = { ...previous };
+  for (const [key, value] of Object.entries(current)) {
+    if (value !== undefined && value !== null && value !== '') result[key] = value;
+  }
+  return result;
 }
 
 function printerConnectionState(device = {}) {
@@ -350,6 +386,13 @@ function waitForEndpoint(page, path) {
   return page.waitForResponse((response) =>
     response.request().method() === 'POST' && response.url().includes(path),
   { timeout: 45000 }).catch(() => null);
+}
+
+function settleWithin(promise, timeoutMs) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))
+  ]);
 }
 
 export function waitForAuthenticationHeaders(page, timeoutMs = 45000) {

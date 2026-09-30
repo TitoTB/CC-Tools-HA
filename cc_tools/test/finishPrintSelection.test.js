@@ -6,6 +6,7 @@ import {
   buildGcodeQueryPayload,
   forwardAuthenticationHeaders,
   hasCrealityAuthentication,
+  mergeDiscoveredPrinters,
   parseGcodeFiles,
   parseGcodeRecords,
   parseGcodeResponse,
@@ -69,6 +70,17 @@ test('extrae impresoras de la lista limitada del Banco de trabajo', () => {
   assert.deepEqual(printers, [
     { name: 'Ender 3 V3 SE', deviceId: '1709971', deviceName: 'device-one', telemetryId: 'tb-one', deviceState: 1, connectionState: 1, idleState: 1, model: 'Ender-3 V3 SE', imageUrl: '', printerInterName: 'Ender-3 V3 SE', deviceType: 5 },
     { name: 'Ender 3', deviceId: '1752391', deviceName: 'device-two', telemetryId: '', deviceState: null, connectionState: null, idleState: null, model: 'Ender-3', imageUrl: '', printerInterName: 'Ender-3', deviceType: 5 }
+  ]);
+});
+
+test('combina los endpoints sin fusionar dos impresoras del mismo modelo', () => {
+  assert.deepEqual(mergeDiscoveredPrinters([
+    { name: 'Raspberry', deviceId: 'printer-1', deviceName: 'Ender-3', model: 'Ender-3' },
+    { name: 'Raspberry', deviceId: 'printer-1', deviceName: 'Ender-3', telemetryId: 'tb-1' },
+    { name: 'Raspberry-2', deviceId: 'printer-2', deviceName: 'Ender-3', model: 'Ender-3' }
+  ]), [
+    { name: 'Raspberry', deviceId: 'printer-1', deviceName: 'Ender-3', model: 'Ender-3', telemetryId: 'tb-1' },
+    { name: 'Raspberry-2', deviceId: 'printer-2', deviceName: 'Ender-3', model: 'Ender-3' }
   ]);
 });
 
