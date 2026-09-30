@@ -1322,7 +1322,7 @@ async function appendShippedOrderRuns(orders, source) {
       taskId: 'shopOrders',
       source,
       status: 'success',
-      message: `Pedido enviado: ${order.title}`,
+      message: `Pedido disponible: ${order.title}`,
       startedAt: finishedAt,
       finishedAt,
       screenshots: [],

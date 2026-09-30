@@ -153,7 +153,7 @@ export async function checkPendingFinishPrint() {
       : freshConfig.telegram.notifyOnFinishPrintError !== false;
     if (notificationEnabled) {
       const message = credited
-        ? `✅ CC Tools: Impresión virtual completada\n${file.name || 'G-code'}\nRecompensa verificada.`
+        ? `🎉 CC Tools: Impresión virtual completada\n${file.name || 'G-code'}\nRecompensa verificada.`
         : `❌ CC Tools: Impresión virtual sin recompensa\n${file.name || 'G-code'}\nEl archivo se ha retirado de la selección automática.`;
       await sendTelegram(freshConfig, message).catch((error) => {
         console.error('[telegram]', error.message);

@@ -252,7 +252,7 @@ async function refreshScheduledShopOrders(config, now = new Date()) {
         taskId: 'shopOrders',
         source: 'schedule',
         status: 'success',
-        message: `Pedido enviado: ${order.title}`,
+        message: `Pedido disponible: ${order.title}`,
         startedAt: finishedAt,
         finishedAt,
         screenshots: [],
@@ -325,7 +325,7 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
       details: { product: { id: goal.productId, name: goal.name, points: goal.points, imageUrl: goal.imageUrl } }
     });
     if (config.telegram.enabled && config.telegram.notifyOnShopRedemption !== false) {
-      await sendTelegram(config, `✅ CC Tools: Objetivo canjeado\n${goal.name}\n${goal.points} puntos`).catch((error) => {
+      await sendTelegram(config, `🎁 CC Tools: Objetivo canjeado\n${goal.name}\n${goal.points} puntos`).catch((error) => {
         console.error('[telegram]', error.message);
       });
     }
@@ -793,7 +793,7 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
     const design = result.details?.boosted?.[0] || result.details?.acted?.[0];
     const failures = result.details?.failures || [];
     if (status === 'success' && config.telegram.notifyOnModelBoost !== false && design) {
-      await sendTelegram(config, `✅ CC Tools: Boost aplicado\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>\nLotería ejecutada.`, {
+      await sendTelegram(config, `🚀 CC Tools: Boost aplicado\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>`, {
         parseMode: 'HTML'
       }).catch((error) => console.error('[telegram]', error.message));
     }
@@ -843,7 +843,7 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
 
     if (config.telegram.notifyOnDesignDownload !== false) {
       for (const design of downloaded) {
-        await sendTelegram(config, `✅ CC Tools: Diseño descargado\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>`, {
+        await sendTelegram(config, `🎨 CC Tools: Diseño descargado\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>`, {
           parseMode: 'HTML'
         }).catch((error) => {
           console.error('[telegram]', error.message);
@@ -868,7 +868,8 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
     if (status === 'success' && config.telegram.notifyOnComment !== false) {
       for (const design of acted) {
         const type = design.commentKind === 'image' ? 'con imagen' : 'sin imagen';
-        await sendTelegram(config, `✅ CC Tools: Comentario ${type} publicado\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>`, {
+        const icon = design.commentKind === 'image' ? '🖼️' : '💬';
+        await sendTelegram(config, `${icon} CC Tools: Comentario ${type} publicado\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>`, {
           parseMode: 'HTML'
         }).catch((error) => console.error('[telegram]', error.message));
       }
@@ -891,8 +892,7 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
 
     if (notifySuccess) {
       for (const design of acted) {
-        const rewardLine = actionRewardTelegramLine(design.rewardVerification);
-        await sendTelegram(config, `${info.telegramSuccess}\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>${rewardLine ? `\n${rewardLine}` : ''}`, {
+        await sendTelegram(config, `${info.telegramSuccess}\n<a href="${escapeTelegramHtmlAttribute(design.url)}">${escapeTelegramHtml(design.title)}</a>`, {
           parseMode: 'HTML'
         }).catch((error) => {
           console.error('[telegram]', error.message);
@@ -916,21 +916,6 @@ function formatCheckinTelegramMessage(status, result = {}) {
   return result.details?.checkin?.status === 'already_done'
     ? '✅ CC Tools: Check-in ya realizado'
     : '✅ CC Tools: Check-in completado con éxito';
-}
-
-function actionRewardTelegramLine(verification = {}) {
-  const message = ({
-    credited: 'Punto acreditado.',
-    not_credited: 'Acción completada, pero Creality Cloud no acreditó el punto.',
-    already_completed: 'La recompensa diaria ya estaba completada.',
-    unverified: 'No se pudo verificar la recompensa diaria.'
-  })[verification.status] || '';
-  const before = verification.before;
-  const after = verification.after;
-  const progress = before?.found && after?.found
-    ? `${before.done}/${before.valid} → ${after.done}/${after.valid}`
-    : '';
-  return message && progress ? `${message} (${progress})` : message;
 }
 
 function updateDependentModelActions(config, taskId, result) {

@@ -26,7 +26,7 @@ const ACTIONS = {
     completedField: 'likeCompleted',
     actionStateField: 'likeActionState',
     incentiveTitle: 'Like 3D Model',
-    telegramSuccess: '✅ CC Tools: Me gusta completado',
+    telegramSuccess: '♥️ CC Tools: Me gusta completado',
     telegramError: '❌ CC Tools: Me gusta fallido',
     progress: 'Pulsando el botón de me gusta...'
   }

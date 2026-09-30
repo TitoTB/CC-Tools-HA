@@ -1193,8 +1193,7 @@ label span {
   color: var(--accent);
   font-size: 0.86rem;
   font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration: none;
   white-space: nowrap;
 }
 
@@ -1220,7 +1219,8 @@ label span {
   background: rgba(255, 255, 255, 0.035);
 }
 
-.points-shop-order.is-shipped {
+.points-shop-order.is-shipped,
+.points-shop-order.is-available {
   border-color: rgba(36, 170, 75, 0.38);
   background: rgba(36, 170, 75, 0.09);
 }
@@ -1273,8 +1273,28 @@ label span {
   font-weight: 700;
 }
 
-.points-shop-order.is-shipped .points-shop-order-status {
+.points-shop-order.is-shipped .points-shop-order-status,
+.points-shop-order.is-available .points-shop-order-status {
   color: var(--accent);
+}
+
+.points-shop-order-status-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.points-shop-order-status-link:hover,
+.points-shop-order-status-link:focus-visible {
+  color: var(--accent-strong);
+}
+
+.points-shop-order-status-link svg {
+  width: 11px;
+  height: 11px;
+  fill: currentColor;
 }
 
 .points-shop-order.is-pending .points-shop-order-status {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.14
+
+- Reconoce los cupones canjeados como disponibles y abre la tienda con el descuento precargado.
+- Mantiene los pedidos disponibles activos hasta que alcancen un estado realmente finalizado.
+- Actualiza las plantillas de Telegram con iconos específicos y mensajes más concisos.
+- Sustituye la notificación de pedido enviado por la de cupón disponible.
+
 ## 1.0.13
 
 - Añade el panel Mis impresoras con conectividad, estado, progreso y detalle de errores en tiempo real.

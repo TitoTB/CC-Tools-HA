@@ -1,8 +1,10 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RETRY_MS = 60 * 60 * 1000;
+const SHOP_ORDERS_SCHEMA_VERSION = 2;
 
 export function normalizeShopOrdersState(value = {}) {
   return {
+    schemaVersion: Math.max(1, Number(value.schemaVersion) || 1),
     items: (Array.isArray(value.items) ? value.items : []).map(normalizeStoredOrder).filter(Boolean),
     updatedAt: String(value.updatedAt || ''),
     lastAttemptAt: String(value.lastAttemptAt || ''),
@@ -19,12 +21,14 @@ export function mergeShopOrdersState(value, orders, now = new Date()) {
     const keepArchived = existing?.archived === true && existing.statusKey === order.statusKey;
     return {
       ...order,
+      useUrl: order.useUrl || (existing?.statusKey === order.statusKey ? existing.useUrl : ''),
       archived: keepArchived,
       archivedAt: keepArchived ? existing.archivedAt : ''
     };
   }).sort((left, right) => Date.parse(right.createdAt || '') - Date.parse(left.createdAt || ''));
 
   return {
+    schemaVersion: SHOP_ORDERS_SCHEMA_VERSION,
     items,
     updatedAt: now.toISOString(),
     lastAttemptAt: now.toISOString(),
@@ -38,7 +42,7 @@ export function shippedShopOrderTransitions(previousValue, nextValue) {
   const next = normalizeShopOrdersState(nextValue);
   const previousById = new Map(previous.items.map((item) => [item.id, item]));
   return next.items.filter((item) => previousById.get(item.id)?.statusKind === 'pending'
-    && item.statusKind === 'shipped');
+    && ['available', 'shipped'].includes(item.statusKind));
 }
 
 export function markShopOrdersRefreshError(value, error, now = new Date()) {
@@ -51,6 +55,10 @@ export function markShopOrdersRefreshError(value, error, now = new Date()) {
 
 export function shopOrdersRefreshDue(value, now = new Date()) {
   const state = normalizeShopOrdersState(value);
+  if (state.schemaVersion < SHOP_ORDERS_SCHEMA_VERSION) {
+    const attemptedAt = Date.parse(state.lastAttemptAt);
+    return !Number.isFinite(attemptedAt) || now.getTime() - attemptedAt >= RETRY_MS;
+  }
   const updatedAt = Date.parse(state.updatedAt);
   if (Number.isFinite(updatedAt) && now.getTime() - updatedAt < DAY_MS) return false;
   const attemptedAt = Date.parse(state.lastAttemptAt);
@@ -70,7 +78,7 @@ function normalizeStoredOrder(value) {
   const id = String(value?.id || '').trim();
   const title = String(value?.title || '').trim();
   if (!id || !title) return null;
-  const statusKind = ['pending', 'shipped', 'neutral'].includes(value.statusKind)
+  const statusKind = ['pending', 'available', 'shipped', 'neutral'].includes(value.statusKind)
     ? value.statusKind
     : 'neutral';
   return {
@@ -83,10 +91,25 @@ function normalizeStoredOrder(value) {
     status: String(value.status || 'Estado desconocido'),
     statusKind,
     statusKey: String(value.statusKey || `${statusKind}:${value.status || ''}`),
+    useUrl: normalizeStoredUseUrl(value.useUrl),
     region: String(value.region || ''),
     createdAt: String(value.createdAt || ''),
     updatedAt: String(value.updatedAt || ''),
     archived: value.archived === true,
     archivedAt: String(value.archivedAt || '')
   };
+}
+
+function normalizeStoredUseUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const hostname = url.hostname.toLowerCase();
+    const trustedHost = hostname === 'creality.com'
+      || hostname.endsWith('.creality.com')
+      || hostname === 'crealitycloud.com'
+      || hostname.endsWith('.crealitycloud.com');
+    return url.protocol === 'https:' && trustedHost ? url.toString() : '';
+  } catch {
+    return '';
+  }
 }
