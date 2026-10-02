@@ -44,6 +44,7 @@ export async function runModelBoost(taskConfig = {}) {
       let resolved = null;
       let ownModelsSkipped = 0;
       let rejectedModels = 0;
+      const permissionRejections = [];
       for (const candidate of designs) {
         design = candidate;
         const target = await resolveBoostTarget(page, candidate, observer, taskConfig.ownUserId);
@@ -51,42 +52,51 @@ export async function runModelBoost(taskConfig = {}) {
           ownModelsSkipped += 1;
           continue;
         }
-        if (target && !boostResponseAccepted(target.permission)) {
+        if (target && !availabilityKnown) {
+          const availability = await readBoostAvailability(page, target.authenticationHeaders);
+          ticketsAvailable = availability.ticketsAvailable;
+          availabilityKnown = true;
+        }
+        const disposition = target ? boostAttemptDisposition({
+          alreadyUsedToday,
+          ticketsAvailable,
+          permissionAccepted: boostResponseAccepted(target.permission)
+        }) : '';
+        if (disposition === 'already_used') {
+          return skipped('El boost diario ya se ha utilizado.', {
+            alreadyUsedToday: true,
+            ticketsAvailable,
+            availabilityCheckedAt: new Date().toISOString()
+          });
+        }
+        if (disposition === 'no_tickets') {
+          return skipped('No hay boletos boost disponibles.', {
+            ticketsAvailable: 0,
+            availabilityCheckedAt: new Date().toISOString()
+          });
+        }
+        if (disposition === 'not_allowed') {
           rejectedModels += 1;
+          permissionRejections.push({
+            designId: candidate.id || '',
+            title: candidate.title || '',
+            modelGroupId: target.modelGroupId || '',
+            permission: target.permission
+          });
           continue;
         }
         resolved = target;
         if (resolved) break;
       }
       if (!resolved && rejectedModels) {
-        throw taskError('BOOST_NOT_ALLOWED', 'Creality Cloud no permite impulsar ninguno de los diseños disponibles.');
+        const error = taskError('BOOST_NOT_ALLOWED', 'Creality Cloud no permite impulsar ninguno de los diseños disponibles.');
+        error.technical = JSON.stringify({ ticketsAvailable, rejectedModels, permissionRejections });
+        throw error;
       }
       if (!resolved && ownModelsSkipped) return skipped('Los diseños disponibles pertenecen al usuario conectado y se han omitido.');
       if (!resolved) throw taskError('BOOST_TARGET_NOT_FOUND', 'No se pudo identificar un diseño apto para recibir el boost.');
 
       const { modelGroupId, authenticationHeaders } = resolved;
-
-      const countResponse = await postJson(page, BOOST_COUNT_URL, { state: 1 }, authenticationHeaders);
-      ensureAccepted(countResponse, 'BOOST_COUNT_FAILED', 'No se pudo consultar el número de boletos boost disponibles.');
-      ticketsAvailable = Math.max(0, Number(countResponse.body?.result?.count) || 0);
-
-      const listResponse = await postJson(page, BOOST_LIST_URL, { page: 1, pageSize: 100, state: 1 }, authenticationHeaders);
-      ensureAccepted(listResponse, 'BOOST_LIST_FAILED', 'No se pudo consultar la lista de boletos boost.');
-      ticketsAvailable = Math.max(ticketsAvailable, Number(listResponse.body?.result?.count) || 0);
-      availabilityKnown = true;
-      if (alreadyUsedToday) {
-        return skipped('El boost diario ya se ha utilizado.', {
-          alreadyUsedToday: true,
-          ticketsAvailable,
-          availabilityCheckedAt: new Date().toISOString()
-        });
-      }
-      if (ticketsAvailable <= 0) {
-        return skipped('No hay boletos boost disponibles.', {
-          ticketsAvailable: 0,
-          availabilityCheckedAt: new Date().toISOString()
-        });
-      }
 
       const safety = await postJson(page, GREEN_CONTENT_URL, {
         sourceType: 'comment',
@@ -224,22 +234,29 @@ export async function checkModelBoostAvailability(taskConfig = {}) {
       if (!resolved) {
         return { ticketsAvailable: 0, checkedAt: new Date().toISOString(), reason: 'no_external_designs' };
       }
-      const countResponse = await postJson(page, BOOST_COUNT_URL, { state: 1 }, resolved.authenticationHeaders);
-      ensureAccepted(countResponse, 'BOOST_COUNT_FAILED', 'No se pudo consultar el número de boletos boost disponibles.');
-      const listResponse = await postJson(page, BOOST_LIST_URL, { page: 1, pageSize: 100, state: 1 }, resolved.authenticationHeaders);
-      ensureAccepted(listResponse, 'BOOST_LIST_FAILED', 'No se pudo consultar la lista de boletos boost.');
+      const availability = await readBoostAvailability(page, resolved.authenticationHeaders);
       return {
-        ticketsAvailable: Math.max(
-          0,
-          Number(countResponse.body?.result?.count) || 0,
-          Number(listResponse.body?.result?.count) || 0
-        ),
+        ticketsAvailable: availability.ticketsAvailable,
         checkedAt: new Date().toISOString()
       };
     } finally {
       observer.stop();
     }
   });
+}
+
+async function readBoostAvailability(page, authenticationHeaders) {
+  const countResponse = await postJson(page, BOOST_COUNT_URL, { state: 1 }, authenticationHeaders);
+  ensureAccepted(countResponse, 'BOOST_COUNT_FAILED', 'No se pudo consultar el número de boletos boost disponibles.');
+  const listResponse = await postJson(page, BOOST_LIST_URL, { page: 1, pageSize: 100, state: 1 }, authenticationHeaders);
+  ensureAccepted(listResponse, 'BOOST_LIST_FAILED', 'No se pudo consultar la lista de boletos boost.');
+  return {
+    ticketsAvailable: Math.max(
+      0,
+      Number(countResponse.body?.result?.count) || 0,
+      Number(listResponse.body?.result?.count) || 0
+    )
+  };
 }
 
 export function selectBoostCandidates(designs = [], ownUserId = '', favoriteOnly = true) {
@@ -327,6 +344,16 @@ export function boostResponseAccepted(response) {
   const bodyCode = Number(response?.body?.code);
   const failType = Number(response?.body?.result?.failType || 0);
   return Boolean(response?.ok && bodyCode === 0 && failType === 0);
+}
+
+export function boostAttemptDisposition({
+  alreadyUsedToday = false,
+  ticketsAvailable = 0,
+  permissionAccepted = false
+} = {}) {
+  if (alreadyUsedToday) return 'already_used';
+  if (Math.max(0, Number(ticketsAvailable) || 0) <= 0) return 'no_tickets';
+  return permissionAccepted ? 'allowed' : 'not_allowed';
 }
 
 export function verifyBoostLottery(raffle) {

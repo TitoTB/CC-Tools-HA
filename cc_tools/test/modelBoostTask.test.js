@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { boostConsumedToday, boostResponseAccepted, selectBoostCandidates, verifyBoostLottery } from '../src/modelBoostTask.js';
+import {
+  boostAttemptDisposition,
+  boostConsumedToday,
+  boostResponseAccepted,
+  selectBoostCandidates,
+  verifyBoostLottery
+} from '../src/modelBoostTask.js';
 
 test('selecciona solo diseños favoritos activos en rondas del menos impulsado al más impulsado', () => {
   const candidates = selectBoostCandidates([
@@ -59,4 +65,19 @@ test('distingue diseños que Creality permite impulsar', () => {
   assert.equal(boostResponseAccepted({ ok: true, body: { code: 0, result: { failType: 0 } } }), true);
   assert.equal(boostResponseAccepted({ ok: true, body: { code: 0, result: { failType: 1 } } }), false);
   assert.equal(boostResponseAccepted({ ok: false, body: { code: 500 } }), false);
+});
+
+test('la ausencia de boletos prevalece sobre el rechazo de permiso del diseño', () => {
+  assert.equal(boostAttemptDisposition({
+    ticketsAvailable: 0,
+    permissionAccepted: false
+  }), 'no_tickets');
+  assert.equal(boostAttemptDisposition({
+    ticketsAvailable: 2,
+    permissionAccepted: false
+  }), 'not_allowed');
+  assert.equal(boostAttemptDisposition({
+    ticketsAvailable: 2,
+    permissionAccepted: true
+  }), 'allowed');
 });

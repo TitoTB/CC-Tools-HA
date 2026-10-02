@@ -37,12 +37,22 @@ export function buildSelectDeviceUrl(gcodeId) {
   return `${SELECT_DEVICE_BASE_URL}/${encodeURIComponent(String(gcodeId || '').trim())}?type=1`;
 }
 
-export function validatePrintCheck(response) {
+export function validatePrintCheck(response, context = {}) {
   if (response?.code !== 0) {
-    throw executionError('FINISH_PRINT_CHECK_REJECTED', response?.msg || 'Creality Cloud rechazó la validación del G-code.');
+    throw printCheckError(
+      'FINISH_PRINT_CHECK_REJECTED',
+      response?.msg || 'Creality Cloud rechazó la validación del G-code.',
+      response,
+      context
+    );
   }
   if (Number(response?.result?.printable) !== 1) {
-    throw executionError('FINISH_PRINT_NOT_PRINTABLE', 'El G-code seleccionado no se puede imprimir en la impresora virtual.');
+    throw printCheckError(
+      'FINISH_PRINT_NOT_PRINTABLE',
+      'El G-code seleccionado no se puede imprimir en la impresora virtual.',
+      response,
+      context
+    );
   }
   return response.result;
 }
@@ -111,7 +121,15 @@ export function parsePrintRecord(response) {
   };
 }
 
-export function executeVirtualPrint({ deviceName, file, timezone = 'Europe/Madrid' }) {
+export function executeVirtualPrint({
+  printerName,
+  deviceId,
+  deviceName,
+  printerInterName,
+  deviceType,
+  file,
+  timezone = 'Europe/Madrid'
+}) {
   const gcodeId = String(file?.id || '').trim();
   const fileName = String(file?.name || '').trim();
   const normalizedDeviceName = String(deviceName || '').trim();
@@ -132,13 +150,30 @@ export function executeVirtualPrint({ deviceName, file, timezone = 'Europe/Madri
         requireTaskList: true
       });
       const authenticationHeaders = await workbenchAuthenticationHeaders(page, gcodeId);
+      const checkPayload = buildPrintCheckPayload({ deviceName: normalizedDeviceName, gcodeId });
       const check = await requestJson(
         page,
         CHECK_PRINT_PATH,
-        buildPrintCheckPayload({ deviceName: normalizedDeviceName, gcodeId }),
+        checkPayload,
         authenticationHeaders
       );
-      validatePrintCheck(check);
+      validatePrintCheck(check, {
+        endpoint: CHECK_PRINT_PATH,
+        request: checkPayload,
+        printer: {
+          name: String(printerName || '').trim(),
+          deviceId: String(deviceId || '').trim(),
+          deviceName: normalizedDeviceName,
+          printerInterName: String(printerInterName || '').trim(),
+          deviceType: Number.isFinite(Number(deviceType)) ? Number(deviceType) : null
+        },
+        gcode: {
+          id: gcodeId,
+          name: fileName,
+          printTime: Math.max(0, Number(file?.printTime) || 0)
+        },
+        selectDeviceUrl: buildSelectDeviceUrl(gcodeId)
+      });
       const task = await requestJson(
         page,
         ADD_PRINT_TASK_PATH,
@@ -302,4 +337,18 @@ async function requestJson(page, path, body, authenticationHeaders) {
 
 function executionError(code, message) {
   return Object.assign(new Error(message), { code });
+}
+
+function printCheckError(code, message, response, context = {}) {
+  const error = executionError(code, message);
+  error.technical = JSON.stringify({
+    stage: 'checkGcodePrintDevice',
+    endpoint: context.endpoint || CHECK_PRINT_PATH,
+    request: context.request || null,
+    printer: context.printer || null,
+    gcode: context.gcode || null,
+    selectDeviceUrl: context.selectDeviceUrl || '',
+    response: response || null
+  });
+  return error;
 }

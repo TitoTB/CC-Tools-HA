@@ -43,7 +43,11 @@ export async function startVirtualPrint(taskConfig = {}) {
 
   try {
     const execution = await executeVirtualPrint({
+      printerName: taskConfig.printerName,
+      deviceId: taskConfig.printerDeviceId,
       deviceName: taskConfig.printerDeviceName,
+      printerInterName: taskConfig.printerInterName,
+      deviceType: taskConfig.printerDeviceType,
       file,
       timezone: taskConfig.timezone || 'Europe/Madrid'
     });

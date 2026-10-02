@@ -1113,6 +1113,10 @@ label span {
   font-size: 0.68rem;
 }
 
+.points-shop-goal-progress-points.is-over-half {
+  color: #fff;
+}
+
 .points-shop-goal-status {
   color: var(--accent);
   font-size: 0.72rem;

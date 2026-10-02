@@ -2719,7 +2719,7 @@ function renderShopGoal(goal = {}) {
         <div class="points-shop-goal-progress" role="progressbar" aria-label="Progreso del objetivo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(goalProgress)}">
           <span class="points-shop-goal-progress-fill" style="width: ${goalProgress}%"></span>
           <span class="points-shop-goal-progress-label">${goalProgressLabel}</span>
-          <span class="points-shop-goal-progress-points">${formatPoints(selected.points)} puntos</span>
+          <span class="points-shop-goal-progress-points ${goalProgress > 50 ? 'is-over-half' : ''}">${formatPoints(selected.points)} puntos</span>
         </div>
       ` : ''}
       ${scheduledForSelected ? '' : `<span class="points-shop-product-points">${formatPoints(selected.points)} puntos</span>`}

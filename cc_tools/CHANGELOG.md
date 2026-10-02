@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.16
+
+- Amplía el diagnóstico de compatibilidad entre impresoras y archivos G-code.
+- Distingue la ausencia de boletos boost del rechazo real de un diseño.
+- Cambia a blanco los puntos requeridos del objetivo al superar el 50% de progreso.
+
 ## 1.0.15
 
 - Detecta todas las impresoras combinando las dos respuestas del Banco de trabajo.
