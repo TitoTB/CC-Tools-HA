@@ -6,12 +6,44 @@ import {
   boostAvailabilityRefreshDue,
   consumeManualDownloadSuccesses,
   delayPendingTaskPlan,
+  executeWithTimeout,
   isGlobalBlockingIncident,
   updateAutomationHealth,
   updateModelBoostState,
   updateNextRunAfterExecution,
   parseRetryAfterMilliseconds
 } from '../src/scheduler.js';
+
+test('el watchdog libera recursos y devuelve un diagnóstico de timeout', async () => {
+  let aborted = false;
+  const pending = new Promise(() => {});
+
+  await assert.rejects(
+    executeWithTimeout(pending, {
+      timeoutMs: 15,
+      taskId: 'modelDownloads',
+      source: 'schedule',
+      onTimeout: () => { aborted = true; }
+    }),
+    (error) => {
+      assert.equal(error.code, 'TASK_EXECUTION_TIMEOUT');
+      assert.match(error.technical, /modelDownloads/);
+      assert.match(error.technical, /Chromium se cerró/);
+      return true;
+    }
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(aborted, true);
+});
+
+test('el watchdog se cancela cuando la tarea termina a tiempo', async () => {
+  const result = await executeWithTimeout(Promise.resolve('ok'), {
+    timeoutMs: 100,
+    taskId: 'modelDownloads',
+    source: 'schedule'
+  });
+  assert.equal(result, 'ok');
+});
 
 test('interpreta Retry-After expresado en segundos sin reintentar', () => {
   assert.equal(parseRetryAfterMilliseconds('120', new Date('2026-09-20T10:00:00Z')), 120000);

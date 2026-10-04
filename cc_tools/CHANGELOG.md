@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.17
+
+- Comprueba la sesión de Creality Cloud antes de iniciar cada automatización y avisa cuando haya caducado.
+- Finaliza las tareas bloqueadas tras ocho minutos, libera Chromium y reprograma el mismo turno automáticamente.
+- Permite que el botón de inicio de sesión cancele una automatización que esté reteniendo el navegador.
+- Registra en el log del contenedor el inicio, el final y la duración de cada tarea.
+
 ## 1.0.16
 
 - Amplía el diagnóstico de compatibilidad entre impresoras y archivos G-code.

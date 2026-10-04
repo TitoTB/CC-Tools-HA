@@ -26,6 +26,7 @@ import {
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
+import { abortAutomationBrowser } from './browserManager.js';
 
 const TASK_IDS = [
   'creality',
@@ -37,9 +38,14 @@ const TASK_IDS = [
 ];
 const MIN_AUTOMATION_GAP_MINUTES = 10;
 const SILENT_RETRY_MINUTES = 10;
+const DEFAULT_TASK_TIMEOUT_MS = 8 * 60 * 1000;
 
 let running = false;
 let runningTask = '';
+let runningSource = '';
+let runningStartedAt = '';
+let runningTimeoutAt = '';
+let cancellationRequest = null;
 let timer = null;
 
 export function startScheduler() {
@@ -61,6 +67,12 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
 
   running = true;
   runningTask = taskId;
+  runningSource = source;
+  runningStartedAt = startedAt;
+  const timeoutMs = taskExecutionTimeoutMs();
+  runningTimeoutAt = new Date(Date.now() + timeoutMs).toISOString();
+  cancellationRequest = null;
+  console.log(`[scheduler] Inicio: ${taskDisplayName(taskId)} · ${source} · límite ${Math.round(timeoutMs / 1000)} s`);
 
   try {
     const config = await readConfig();
@@ -76,7 +88,15 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
       activateFinishPrintProfile(taskConfig, profile.id);
       await writeConfig(config);
     }
-    const result = await executeTask(taskId, taskConfig, options, config);
+    const result = await executeWithTimeout(
+      executeTask(taskId, taskConfig, options, config),
+      {
+        timeoutMs,
+        taskId,
+        source,
+        onTimeout: abortAutomationBrowser
+      }
+    );
     const status = result.skipped ? 'skipped' : result.success ? 'success' : 'failed';
     const message = formatRunMessage(taskId, status, result);
 
@@ -125,6 +145,42 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
 
     return { status, message };
   } catch (error) {
+    if (cancellationRequest?.taskId === taskId) {
+      const cancelledAt = new Date().toISOString();
+      const message = cancellationRequest.reason === 'login'
+        ? 'Ejecución cancelada para abrir el inicio de sesión de Creality Cloud.'
+        : 'Ejecución cancelada manualmente.';
+      await appendRun({
+        taskId,
+        source,
+        status: 'skipped',
+        message,
+        startedAt,
+        finishedAt: cancelledAt,
+        screenshots: [],
+        details: {
+          diagnostics: [{
+            code: 'TASK_CANCELLED',
+            category: 'technical',
+            systemic: false,
+            message,
+            detectedAt: cancelledAt,
+            technical: `Tarea: ${taskId}. Motivo: ${cancellationRequest.reason}.`
+          }]
+        }
+      });
+      if (source === 'schedule') {
+        const freshConfig = await readConfig();
+        delayPendingTaskPlan(
+          freshConfig.tasks[taskId],
+          taskId,
+          new Date(Date.now() + SILENT_RETRY_MINUTES * 60 * 1000)
+        );
+        await writeConfig(freshConfig);
+      }
+      return { status: 'skipped', message };
+    }
+
     if (source === 'schedule'
       && ['INCENTIVE_PAGE_NOT_READY', 'BROWSER_CRASHED', 'FINISH_PRINT_AUTH_REQUEST_NOT_OBSERVED'].includes(error.code)
       && error.silentRetry) {
@@ -161,20 +217,86 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
     freshConfig.tasks[taskId].lastStatus = 'error';
     freshConfig.tasks[taskId].lastMessage = runMessage;
     const failedResult = { success: false, details };
-    updateNextRunAfterExecution(freshConfig.tasks[taskId], taskId, source, failedResult);
+    if (source === 'schedule' && error.code === 'TASK_EXECUTION_TIMEOUT') {
+      delayPendingTaskPlan(
+        freshConfig.tasks[taskId],
+        taskId,
+        new Date(Date.now() + SILENT_RETRY_MINUTES * 60 * 1000)
+      );
+    } else {
+      updateNextRunAfterExecution(freshConfig.tasks[taskId], taskId, source, failedResult);
+    }
     const healthEvent = updateAutomationHealth(freshConfig, taskId, 'error', failedResult);
     await writeConfig(freshConfig);
 
     await notifyTaskResult(freshConfig, taskId, 'error', failedResult, healthEvent);
     throw error;
   } finally {
+    const elapsedSeconds = Math.max(0, Math.round((Date.now() - Date.parse(startedAt)) / 1000));
+    console.log(`[scheduler] Fin: ${taskDisplayName(taskId)} · ${source} · ${elapsedSeconds} s`);
     running = false;
     runningTask = '';
+    runningSource = '';
+    runningStartedAt = '';
+    runningTimeoutAt = '';
+    cancellationRequest = null;
   }
 }
 
 export function schedulerState() {
-  return { running, runningTask };
+  return {
+    running,
+    runningTask,
+    runningSource,
+    startedAt: runningStartedAt,
+    timeoutAt: runningTimeoutAt
+  };
+}
+
+export async function cancelRunningTask(reason = 'manual', timeoutMs = 10000) {
+  if (!running) return { cancelled: false, taskId: '' };
+  const taskId = runningTask;
+  cancellationRequest = {
+    taskId,
+    reason: String(reason || 'manual'),
+    requestedAt: new Date().toISOString()
+  };
+  await abortAutomationBrowser();
+
+  const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 10000);
+  while (running && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return { cancelled: !running, taskId };
+}
+
+export function executeWithTimeout(operation, options = {}) {
+  const timeoutMs = Math.max(1, Number(options.timeoutMs) || DEFAULT_TASK_TIMEOUT_MS);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`La ejecución superó el tiempo máximo de ${Math.round(timeoutMs / 1000)} segundos.`);
+      error.code = 'TASK_EXECUTION_TIMEOUT';
+      error.systemic = false;
+      error.technical = [
+        `Tarea: ${options.taskId || 'desconocida'}.`,
+        `Origen: ${options.source || 'desconocido'}.`,
+        `Tiempo máximo: ${timeoutMs} ms.`,
+        'Chromium se cerró para liberar el planificador.'
+      ].join(' ');
+      reject(error);
+      Promise.resolve(options.onTimeout?.()).catch((abortError) => {
+        console.error('[scheduler] No se pudo cerrar Chromium tras agotar el tiempo:', abortError?.message || String(abortError));
+      });
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  return Promise.race([Promise.resolve(operation), timeout])
+    .finally(() => clearTimeout(timer));
+}
+
+function taskExecutionTimeoutMs() {
+  return Math.max(60 * 1000, Number(process.env.CCTOOLS_TASK_TIMEOUT_MS) || DEFAULT_TASK_TIMEOUT_MS);
 }
 
 async function tick() {
