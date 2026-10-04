@@ -184,7 +184,7 @@ export function mergePointsState(current = {}, snapshot = {}, { replaceTransacti
 
 function classifyPointTask(label) {
   const normalized = normalizePointTaskLabel(label).toLowerCase();
-  if (normalized === 'convert') return 'Conversión';
+  if (/^(?:convert|convertir|conversi[oó]n)$/.test(normalized)) return 'Conversión';
   if (normalized === 'add a device') return 'Añadir dispositivo';
   if (normalized === 'edit profile') return 'Completar perfil';
   if (normalized === 'upload models') return 'Subida de diseños';
@@ -207,9 +207,16 @@ function normalizePointTaskLabel(value) {
 
 function pointTransactionSourceLabel(value) {
   let label = normalizePointTaskLabel(value);
+  // The points page sometimes flattens its whole header and filter toolbar into
+  // the first transaction label. Keep the final known action instead of
+  // exposing that page chrome as a transaction name.
+  const conversion = label.match(/(?:^|\s)(Convert|Convertir|Conversi[oó]n)$/i);
+  if (conversion) return conversion[1];
   const balancePrefixes = [
     /^.*Puntos est(?:a|á)ndar\s*[\d.,]+\s*/i,
+    /^.*[\d.,]+\s+Puntos est(?:a|á)ndar\s*/i,
     /^.*Standard Points\s*[\d.,]+\s*/i,
+    /^.*[\d.,]+\s+Standard Points\s*/i,
     /^.*Puntos totales(?:\s+Ver reglas)?\s*[\d.,]+\s*/i,
     /^.*Total Points(?:\s+View Rules)?\s*[\d.,]+\s*/i
   ];
@@ -237,7 +244,7 @@ export function mergePointTransactions(current = [], incoming = []) {
   const incomingTransactions = Array.isArray(incoming) ? incoming : [];
   for (const transaction of [...currentTransactions, ...incomingTransactions]) {
     if (!transaction?.date || !Number.isFinite(Number(transaction.amount))) continue;
-    const sourceType = normalizePointTaskLabel(transaction.sourceType);
+    const sourceType = pointTransactionSourceLabel(transaction.sourceType);
     const normalized = {
       date: String(transaction.date),
       time: String(transaction.time || ''),

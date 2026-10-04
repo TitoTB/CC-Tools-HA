@@ -1,10 +1,45 @@
 # Changelog
 
+## 1.0.17
+
+- Integra todas las mejoras de la versión 1.0.16.
+- Recupera Añadir a la colección de CC Tools Dev 1.0.13: ejecución manual, programación, columna y filtro de diseños, notificaciones y API de Home Assistant.
+- Conserva la configuración de colecciones al actualizar y comprueba el punto de Collection Models antes de registrar éxito.
+- Si aparece el Recordatorio de reposición durante el check-in, marca «No recordar de nuevo en este ciclo», pulsa «Hecho» y vuelve a intentarlo una vez si sigue pendiente.
+- No registra éxito por cerrar el aviso: exige la recompensa o el estado Registrado y conserva una captura si no puede completar el proceso.
+
+## 1.0.16
+
+- Amplía el diagnóstico de compatibilidad entre impresoras y archivos G-code.
+- Distingue la ausencia de boletos boost del rechazo real de un diseño.
+- Cambia a blanco los puntos requeridos del objetivo al superar el 50% de progreso.
+
+## 1.0.15
+
+- Detecta todas las impresoras combinando las dos respuestas del Banco de trabajo.
+- Mantiene separadas varias impresoras del mismo modelo mediante sus identificadores únicos.
+
+## 1.0.14
+
+- Reconoce los cupones canjeados como disponibles y abre la tienda con el descuento precargado.
+- Mantiene los pedidos disponibles activos hasta que alcancen un estado realmente finalizado.
+- Actualiza las plantillas de Telegram con iconos específicos y mensajes más concisos.
+- Sustituye la notificación de pedido enviado por la de cupón disponible.
+
+## 1.0.13
+
+- Añade el panel Mis impresoras con conectividad, estado, progreso y detalle de errores en tiempo real.
+- Permite pausar, reanudar y detener impresiones, además de liberar procesos bloqueados cuando sea necesario.
+- Incorpora el envío manual desde cada impresora inactiva utilizando la galería completa de G-code.
+- Distingue correctamente entre impresoras inactivas, desconectadas, imprimiendo y finalizadas sin arrastrar datos antiguos.
+- Evita confundir contenido externo incrustado con una verificación de seguridad de Creality Cloud.
+- Elimina el bloque manual duplicado Realizar impresión.
+
 ## 1.0.12
 
-- Activa Añadir a la colección con ejecución manual y programación.
-- Recupera el modelId real exclusivamente del HTML de la ficha, guarda en Default Collections y verifica el punto diario.
-- Expone la tarea collections, sus controles y eventos en la API de Home Assistant.
+- Corrige las conversiones de puntos Spotlight en el historial sin mezclar el encabezado y los filtros de Creality Cloud.
+- Repara automáticamente los nombres defectuosos que ya estuvieran guardados en el historial.
+- Retira la herramienta experimental Completa tu colección y su configuración asociada.
 
 ## 1.0.11
 

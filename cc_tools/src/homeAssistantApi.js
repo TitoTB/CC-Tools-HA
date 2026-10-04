@@ -120,6 +120,7 @@ function homeAssistantOrder(order) {
     quantity: Math.max(1, Number(order.quantity) || 1),
     status: String(order.status || 'Estado desconocido'),
     statusKind: String(order.statusKind || 'neutral'),
+    useUrl: String(order.useUrl || ''),
     region: String(order.region || ''),
     createdAt: String(order.createdAt || ''),
     updatedAt: String(order.updatedAt || '')

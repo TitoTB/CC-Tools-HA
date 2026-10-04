@@ -6,6 +6,7 @@ export const LIMIT_DEVICE_LIST_PATH = '/api/rest/print/cluster/devices/getLimitD
 const GCODE_SELECT_PATH = '/api/cxy/v2/gcodev2/selectForPrinter';
 const GCODE_OWNER_LIST_PATH = '/api/cxy/v2/gcode/ownerList';
 const GCODE_PAGE_SIZE = 3;
+const GCODE_LIBRARY_PAGE_SIZE = 12;
 const MAX_GCODE_PAGES = 50;
 
 export function discoverPrinters() {
@@ -14,18 +15,22 @@ export function discoverPrinters() {
     const deviceListResponse = waitForEndpoint(page, LIMIT_DEVICE_LIST_PATH);
     const deviceGroupsResponse = waitForDeviceGroups(page);
     await page.goto(WORKBENCH_URL, { waitUntil: 'domcontentloaded' });
-    const response = await deviceListResponse;
     await page.waitForTimeout(1500);
     ensureWorkbenchSession(page, await collectSurfaceText(page));
 
-    const payload = await response?.json().catch(() => null);
-    const responsePrinters = parsePrinterResponse(payload);
+    const [response, groupsResponse] = await Promise.all([
+      settleWithin(deviceListResponse, 2500),
+      settleWithin(deviceGroupsResponse, 2500)
+    ]);
+    const [payload, groupsPayload] = await Promise.all([
+      response?.json().catch(() => null),
+      groupsResponse?.json().catch(() => null)
+    ]);
+    const responsePrinters = mergeDiscoveredPrinters([
+      ...parsePrinterResponse(payload),
+      ...parsePrinterResponse(groupsPayload)
+    ]);
     if (responsePrinters.length) return responsePrinters;
-
-    const groupsResponse = await deviceGroupsResponse;
-    const groupsPayload = await groupsResponse?.json().catch(() => null);
-    const groupedPrinters = parsePrinterResponse(groupsPayload);
-    if (groupedPrinters.length) return groupedPrinters;
 
     const sources = await collectTextSources(page);
     const printers = parsePrinterNames(sources.join('\n'));
@@ -89,6 +94,46 @@ export function discoverGcodeFiles(printer = {}) {
   });
 }
 
+export function discoverGcodeLibrary() {
+  return withAutomationBrowser({}, async (context) => {
+    const page = context.pages()[0] || await context.newPage();
+    const authenticationHeadersPromise = waitForAuthenticationHeaders(page);
+    await page.goto(WORKBENCH_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1500);
+    ensureWorkbenchSession(page, await collectSurfaceText(page));
+    const authenticationHeaders = await authenticationHeadersPromise;
+    if (!authenticationHeaders) {
+      const error = discoveryError(
+        'FINISH_PRINT_AUTH_REQUEST_NOT_OBSERVED',
+        'Creality Cloud no realizó la consulta autenticada del Banco de trabajo.'
+      );
+      error.silentRetry = true;
+      throw error;
+    }
+
+    const responses = [];
+    for (let pageNumber = 1; pageNumber <= MAX_GCODE_PAGES; pageNumber += 1) {
+      const response = await requestGcodeFiles(
+        page,
+        buildGcodeLibraryPayload(pageNumber),
+        authenticationHeaders,
+        GCODE_OWNER_LIST_PATH
+      );
+      responses.push(response);
+      const list = Array.isArray(response?.result?.list) ? response.result.list : [];
+      const count = Number(response?.result?.count);
+      if (!list.length || list.length < GCODE_LIBRARY_PAGE_SIZE) break;
+      if (Number.isFinite(count) && pageNumber * GCODE_LIBRARY_PAGE_SIZE >= count) break;
+    }
+
+    const files = parseGcodeRecords(responses);
+    if (!files.length) {
+      throw discoveryError('FINISH_PRINT_GCODES_NOT_FOUND', 'No se encontraron archivos G-code en Cargas.');
+    }
+    return files;
+  });
+}
+
 export function parsePrinterNames(text) {
   const lines = normalizedLines(text);
   const ignored = /^(Banco de trabajo|Workbench|Dispositivos(?:\s*\(\d+\))?|Devices(?:\s*\(\d+\))?|En línea|Online|Desconectad[ao]|Offline|Imprimiendo|Printing|Pausad[ao]|Paused|Imprimir desde archivos en la nube|Print from cloud files)$/i;
@@ -131,7 +176,12 @@ export function parsePrinterResponse(payload) {
         name,
         deviceId: String(device.deviceId || device.dn || device.id || '').trim(),
         deviceName: String(device.deviceName || device.dn || '').trim(),
+        telemetryId: String(device.tbId || device.telemetryId || '').trim(),
+        deviceState: Number.isFinite(Number(device.deviceState)) ? Number(device.deviceState) : null,
+        connectionState: printerConnectionState(device),
+        idleState: Number.isFinite(Number(device.idleState)) ? Number(device.idleState) : null,
         model,
+        imageUrl: printerImageUrl(device),
         printerInterName: String(device.deviceType?.internalName || model).trim(),
         deviceType: Number.isFinite(Number(device.type)) ? Number(device.type) : null
       });
@@ -139,6 +189,85 @@ export function parsePrinterResponse(payload) {
   }
 
   return [...unique.values()];
+}
+
+export function mergeDiscoveredPrinters(printers = []) {
+  const merged = [];
+  for (const printer of Array.isArray(printers) ? printers : []) {
+    if (!printer || typeof printer !== 'object') continue;
+    const deviceId = String(printer.deviceId || '').trim();
+    const telemetryId = String(printer.telemetryId || '').trim();
+    const name = String(printer.name || '').trim();
+    const deviceName = String(printer.deviceName || '').trim();
+    const index = merged.findIndex((candidate) => {
+      const candidateDeviceId = String(candidate.deviceId || '').trim();
+      const candidateTelemetryId = String(candidate.telemetryId || '').trim();
+      if (deviceId && candidateDeviceId) return deviceId === candidateDeviceId;
+      if (telemetryId && candidateTelemetryId) return telemetryId === candidateTelemetryId;
+      return Boolean(name && deviceName && name === candidate.name && deviceName === candidate.deviceName);
+    });
+    if (index < 0) {
+      merged.push({ ...printer });
+      continue;
+    }
+    merged[index] = mergePrinterFields(merged[index], printer);
+  }
+  return merged;
+}
+
+function mergePrinterFields(previous, current) {
+  const result = { ...previous };
+  for (const [key, value] of Object.entries(current)) {
+    if (value !== undefined && value !== null && value !== '') result[key] = value;
+  }
+  return result;
+}
+
+function printerConnectionState(device = {}) {
+  const value = [
+    device.connect,
+    device.connectionState,
+    device.connectStatus,
+    device.online,
+    device.isOnline
+  ].find((candidate) => candidate !== undefined && candidate !== null && candidate !== '');
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (/^(?:online|connected|en línea)$/i.test(String(value || '').trim())) return 1;
+  if (/^(?:offline|disconnected|desconectad[ao])$/i.test(String(value || '').trim())) return 0;
+  return Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function printerImageUrl(device = {}) {
+  const type = device.deviceType && typeof device.deviceType === 'object' ? device.deviceType : {};
+  const candidate = [
+    device.imageUrl, device.image, device.img, device.picUrl, device.pictureUrl,
+    device.deviceImg, device.printerImg, device.thumbnail,
+    type.imageUrl, type.image, type.img, type.picUrl, type.pictureUrl,
+    type.deviceImg, type.printerImg, type.thumbnail
+  ].map((value) => String(value || '').trim()).find(Boolean) || findNestedImageUrl(device);
+  if (!candidate) return '';
+  const normalized = candidate.startsWith('//') ? `https:${candidate}` : candidate;
+  try {
+    const url = new URL(normalized);
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function findNestedImageUrl(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 3) return '';
+  for (const [key, nested] of Object.entries(value)) {
+    if (/image|img|pic|cover|thumbnail|icon|logo/i.test(key) && typeof nested === 'string' && /^(?:https?:)?\/\//i.test(nested.trim())) {
+      return nested.trim();
+    }
+  }
+  for (const nested of Object.values(value)) {
+    if (!nested || typeof nested !== 'object') continue;
+    const found = findNestedImageUrl(nested, depth + 1);
+    if (found) return found;
+  }
+  return '';
 }
 
 export function parseGcodeFiles(text) {
@@ -206,6 +335,13 @@ export function buildGcodeOwnerListPayload({ page, printerInterName, strictPrint
   return payload;
 }
 
+export function buildGcodeLibraryPayload(page = 1) {
+  return {
+    page: Math.max(1, Number(page) || 1),
+    pageSize: GCODE_LIBRARY_PAGE_SIZE
+  };
+}
+
 export function forwardAuthenticationHeaders(headers = {}) {
   const blocked = new Set([
     'accept',
@@ -250,6 +386,13 @@ function waitForEndpoint(page, path) {
   return page.waitForResponse((response) =>
     response.request().method() === 'POST' && response.url().includes(path),
   { timeout: 45000 }).catch(() => null);
+}
+
+function settleWithin(promise, timeoutMs) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))
+  ]);
 }
 
 export function waitForAuthenticationHeaders(page, timeoutMs = 45000) {

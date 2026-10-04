@@ -28,6 +28,10 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Install Chromium for check-in regression tests
+        run: npx playwright install --with-deps chromium
+      - name: Test check-in reminder in browser
+        run: npm run test:checkin:browser
 
   build:
     runs-on: ubuntu-latest

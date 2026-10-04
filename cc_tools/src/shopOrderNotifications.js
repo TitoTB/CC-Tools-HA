@@ -7,7 +7,7 @@ export async function notifyShippedShopOrders(config, orders = []) {
     const points = new Intl.NumberFormat('es-ES').format(Math.max(0, Number(order.points) || 0));
     await sendTelegram(
       config,
-      `📦 CC Tools: Pedido enviado\n${order.title}\n${points} puntos\n${CREALITY_SHOP_ORDERS_URL}`
+      `🎁 CC Tools: Cupón disponible\n${order.title}\n${points} puntos\n${order.useUrl || CREALITY_SHOP_ORDERS_URL}`
     ).catch((error) => console.error('[telegram]', error.message));
   }
 }

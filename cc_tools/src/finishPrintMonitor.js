@@ -77,6 +77,10 @@ export async function checkPendingFinishPrint() {
       return result;
     }
 
+    if (result.status === 'failed') {
+      return finalizeFailedPrint(freshConfig, current, result);
+    }
+
     if (result.status === 'unverified') {
       const attempts = Math.max(0, Number(current.verificationAttempts) || 0) + 1;
       if (shouldStopRewardVerification(result.printRecord, attempts)) {
@@ -149,7 +153,7 @@ export async function checkPendingFinishPrint() {
       : freshConfig.telegram.notifyOnFinishPrintError !== false;
     if (notificationEnabled) {
       const message = credited
-        ? `✅ CC Tools: Impresión virtual completada\n${file.name || 'G-code'}\nRecompensa verificada.`
+        ? `🎉 CC Tools: Impresión virtual completada\n${file.name || 'G-code'}\nRecompensa verificada.`
         : `❌ CC Tools: Impresión virtual sin recompensa\n${file.name || 'G-code'}\nEl archivo se ha retirado de la selección automática.`;
       await sendTelegram(freshConfig, message).catch((error) => {
         console.error('[telegram]', error.message);
@@ -177,12 +181,89 @@ export async function checkPendingFinishPrint() {
       current.lastCheckedAt = new Date().toISOString();
       current.nextCheckAt = new Date(Date.now() + RETRY_INTERVAL_MS).toISOString();
       current.verificationError = error.code || error.message || String(error);
+      const signature = `${current.verificationError}:${current.printRecord?.printState ?? 'unknown'}:${current.printRecord?.printError ?? 'unknown'}`;
+      const shouldLog = current.lastLoggedVerificationError !== signature;
+      if (shouldLog) {
+        current.lastLoggedVerificationError = signature;
+      }
       await writeConfig(freshConfig);
+      if (shouldLog) {
+        await appendRun({
+          taskId: 'finishPrint',
+          source: current.source || 'schedule',
+          status: 'error',
+          message: `No se pudo comprobar la impresión pendiente: ${error.message || current.verificationError}`,
+          finishedAt: current.lastCheckedAt,
+          details: {
+            file: current.file || {},
+            printerProfileId: current.printerProfileId || '',
+            printerName: current.printerName || '',
+            printId: current.printId || '',
+            printRecord: current.printRecord || null,
+            pendingDiagnostics: buildPendingDiagnostics(current),
+            failures: [{
+              title: current.file?.name || current.printerName || 'Impresión pendiente',
+              error: error.message || current.verificationError,
+              diagnostic: {
+                code: error.code || 'FINISH_PRINT_VERIFICATION_ERROR',
+                category: 'technical',
+                message: error.message || current.verificationError,
+                technical: buildPendingDiagnostics(current)
+              }
+            }]
+          }
+        }).catch((appendError) => console.error('[finish-print-monitor]', appendError.message));
+      }
     }
     return { status: 'retry', error: error.code || error.message || String(error) };
   } finally {
     checking = false;
   }
+}
+
+async function finalizeFailedPrint(config, pending, result) {
+  const file = pending.file || {};
+  const finishedAt = new Date().toISOString();
+  const state = result.printRecord?.stateLabel || `estado ${result.printRecord?.printState ?? 'desconocido'}`;
+  config.tasks.finishPrint.pendingVerification = null;
+  config.tasks.finishPrint.lastRunAt = finishedAt;
+  config.tasks.finishPrint.lastStatus = 'failed';
+  config.tasks.finishPrint.lastMessage = `La impresión ${file.name || 'G-code'} terminó en ${state.toLowerCase()}; se liberó el bloqueo.`;
+  await writeConfig(config);
+  await appendRun({
+    taskId: 'finishPrint',
+    source: pending.source || 'schedule',
+    status: 'failed',
+    message: config.tasks.finishPrint.lastMessage,
+    finishedAt,
+    details: {
+      file,
+      printerProfileId: pending.printerProfileId || '',
+      printerName: pending.printerName || '',
+      printId: pending.printId || '',
+      printRecord: result.printRecord,
+      pendingDiagnostics: buildPendingDiagnostics(pending)
+    }
+  });
+  return { ...result, status: 'failed_cleared' };
+}
+
+function buildPendingDiagnostics(pending = {}) {
+  return {
+    printId: String(pending.printId || ''),
+    printerProfileId: String(pending.printerProfileId || ''),
+    printerName: String(pending.printerName || ''),
+    startedAt: String(pending.startedAt || ''),
+    lastCheckedAt: String(pending.lastCheckedAt || ''),
+    nextCheckAt: String(pending.nextCheckAt || ''),
+    verificationAttempts: Math.max(0, Number(pending.verificationAttempts) || 0),
+    printState: pending.printRecord?.printState ?? null,
+    printStateLabel: pending.printRecord?.stateLabel || '',
+    printError: pending.printRecord?.printError ?? null,
+    printJobTime: pending.printRecord?.printJobTime ?? null,
+    printStartTime: pending.printRecord?.printStartTime ?? null,
+    printEndTime: pending.printRecord?.printEndTime ?? null
+  };
 }
 
 export function shouldStopRewardVerification(printRecord, attempts) {

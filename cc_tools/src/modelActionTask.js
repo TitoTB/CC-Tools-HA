@@ -27,7 +27,7 @@ const ACTIONS = {
     completedField: 'likeCompleted',
     actionStateField: 'likeActionState',
     incentiveTitle: 'Like 3D Model',
-    telegramSuccess: '✅ CC Tools: Me gusta completado',
+    telegramSuccess: '♥️ CC Tools: Me gusta completado',
     telegramError: '❌ CC Tools: Me gusta fallido',
     progress: 'Pulsando el botón de me gusta...'
   },
@@ -53,7 +53,8 @@ export async function runModelAction(actionKey, taskConfig = {}, options = {}) {
     action.completedField,
     action.actionStateField,
     options.ownUserId,
-    taskConfig.prioritizeFavorites !== false
+    taskConfig.prioritizeFavorites !== false,
+    Math.random
   );
 
   const failures = [];
@@ -319,12 +320,14 @@ export function chooseCandidates(
   prioritizeFavorites = true,
   random = Math.random
 ) {
+  const blockedStates = new Set(['applied_uncredited', 'credited', 'already_applied']);
+  blockedStates.add('ambiguous');
   const eligible = designs
     .filter((design) => design.url
       && !design[completedField]
       && !isOwnModel(design, ownUserId)
       && !(design.indexedOnly === true && design.source === 'favorite' && design.favoriteActive !== true)
-      && !['applied_uncredited', 'ambiguous', 'credited', 'already_applied'].includes(design[actionStateField]))
+      && !blockedStates.has(design[actionStateField]))
   const eligibleIds = new Set(eligible.map((design) => design.id));
   const favorites = selectFavoriteCandidates(designs, completedField, ownUserId)
     .filter((design) => eligibleIds.has(design.id));

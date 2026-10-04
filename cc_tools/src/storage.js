@@ -4,6 +4,7 @@ import { canonicalModelUrl, modelKeyFromUrl, modelSlugFromUrl, sameModelIdentity
 import { DEFAULT_FAVORITE_PROFILE, normalizeFavoriteProfiles } from './favoriteProfiles.js';
 import { activateFinishPrintProfile, normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
 import { normalizeShopOrdersState } from './shopOrdersState.js';
+import { mergePointTransactions } from './pointsCounter.js';
 
 const DATA_DIR = process.env.CCTOOLS_DATA_DIR || path.resolve('data');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
@@ -850,6 +851,7 @@ function normalizeStoredConfig(stored) {
   config.crealityFavorites = normalizeFavoriteProfiles(config.crealityFavorites);
   config.shopGoal = normalizeStoredShopGoal(config.shopGoal);
   config.shopOrders = normalizeShopOrdersState(config.shopOrders);
+  config.points.transactions = mergePointTransactions(config.points.transactions, []);
   config.tasks.finishPrint.printerProfiles = normalizeFinishPrintProfiles(config.tasks.finishPrint);
   activateFinishPrintProfile(
     config.tasks.finishPrint,

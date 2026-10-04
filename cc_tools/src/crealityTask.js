@@ -12,11 +12,9 @@ import {
   observeCrealityPage
 } from './crealityDiagnostics.js';
 import { readPointsSummary } from './pointsCounter.js';
+import { submitDailyCheckin } from './checkinReminder.js';
 
 const CHECKIN_URL = 'https://www.crealitycloud.com/check-in';
-const CHECKIN_BUTTON_SELECTOR = '.sign-in-action .sign-in-btn';
-const CHECKIN_AVAILABLE_RE = /^(registrar|check\s*in\s*today)$/i;
-const CHECKIN_DONE_RE = /^(registrado|checked\s*in)$/i;
 
 export async function openLoginBrowser() {
   await openInteractiveBrowser(CHECKIN_URL);
@@ -133,47 +131,10 @@ async function executeCheckin(page, screenshots, observer) {
 
   await page.waitForTimeout(2500);
 
-  const button = container.locator(CHECKIN_BUTTON_SELECTOR).first();
-  const buttonVisible = await button.isVisible().catch(() => false);
-  const buttonText = normalize(await button.textContent().catch(() => ''));
-
-  if (buttonVisible && CHECKIN_DONE_RE.test(buttonText)) {
-    const screenshot = await takeScreenshot(page, 'checkin-already-done');
-    screenshots.push(screenshot);
-    return {
-      success: true,
-      status: 'already_done',
-      message: 'Check-in ya realizado hoy.'
-    };
-  }
-
-  if (buttonVisible && CHECKIN_AVAILABLE_RE.test(buttonText)) {
-    await button.scrollIntoViewIfNeeded().catch(() => {});
-    await button.click({ timeout: 6000 });
-    await page.waitForTimeout(5000);
-
-    const rewardText = await findRewardText(container);
-    const finalButtonText = normalize(await button.textContent().catch(() => ''));
-    if (rewardText || CHECKIN_DONE_RE.test(finalButtonText)) {
-      const screenshot = await takeScreenshot(page, 'checkin-success');
-      screenshots.push(screenshot);
-      const reward = normalizeCheckinReward(rewardText);
-      return {
-        success: true,
-        status: 'completed_now',
-        reward,
-        message: 'Check-in completado correctamente.'
-      };
-    }
-
-    const screenshot = await takeScreenshot(page, 'checkin-confirmation-failed');
-    screenshots.push(screenshot);
-    return {
-      success: false,
-      status: 'confirmation_failed',
-      reason: 'No se pudo confirmar el resultado después de pulsar',
-      message: 'No se pudo confirmar que el check-in se haya completado.'
-    };
+  const result = await submitDailyCheckin(page, container);
+  if (result.status !== 'unknown_state') {
+    screenshots.push(await takeScreenshot(page, `checkin-${result.status}`));
+    return result;
   }
 
   const finalDiagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
@@ -191,13 +152,7 @@ async function executeCheckin(page, screenshots, observer) {
 
   const screenshot = await takeScreenshot(page, 'checkin-not-found');
   screenshots.push(screenshot);
-  return {
-    success: false,
-    status: 'unknown_state',
-    reason: 'Estado del check-in no reconocido',
-    rawText: buttonText,
-    message: 'No se ha podido identificar el estado del check-in.'
-  };
+  return result;
 }
 
 export async function executeRaffle(page, screenshots = [], options = {}) {
@@ -304,11 +259,6 @@ export async function executeRaffle(page, screenshots = [], options = {}) {
   };
 }
 
-async function findRewardText(container) {
-  const reward = container.locator('.reward-content-box .reward-content-label').first();
-  return normalize(await reward.textContent({ timeout: 5000 }).catch(() => ''));
-}
-
 async function dismissDialog(page, dialog) {
   const button = dialog.locator('button, [role="button"], .cus-button, .el-button, .win-btn, [class*="confirm"], span, div, a')
     .filter({ hasText: /^\s*(Got\s*it|Entendido|Aceptar|Close|Confirm|OK|Ok)\s*$/i })
@@ -385,14 +335,6 @@ async function takeScreenshot(page, label) {
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function normalizeCheckinReward(value) {
-  const text = normalize(value);
-  const match = text.match(/^(\d+)\s*(?:vez|veces|time|times)$/i);
-  if (!match) return text;
-  const amount = Number(match[1]) || 0;
-  return `${amount} ${amount === 1 ? 'boleto de lotería' : 'boletos de lotería'}`;
 }
 
 function manualCheckinMessage(checkin) {

@@ -25,6 +25,14 @@ La API local expone esta herramienta como `collections` en `/api/integration/sta
 
 La creación de entidades y controles en Home Assistant depende de que la integración cliente admita esta tarea; este complemento proporciona su API.
 
+## Recordatorio de reposición del check-in
+
+Si Creality Cloud muestra «Recordatorio de reposición», CC Tools marca «No recordar de nuevo en este ciclo» y pulsa «Hecho». Después comprueba si el check-in sigue pendiente y lo reintenta una vez. Funciona tanto en la página principal como dentro del iframe y reconoce los textos en español e inglés.
+
+La ejecución solo se considera correcta al detectar la recompensa o el estado «Registrado». Si falta la casilla, no se puede marcar, el aviso no se cierra o vuelve a aparecer, se registra el fallo con una captura. Este flujo no consume tarjetas de reposición.
+
+Las pruebas del diálogo se ejecutan con `npm run test:checkin:browser`. Requieren Chromium instalado para Playwright (`npx playwright install chromium`); en Windows utilizan Chrome.
+
 ## Datos persistentes
 
 La configuración, la sesión del navegador, el historial y las capturas se almacenan en `/data`. Home Assistant conserva estos datos durante las actualizaciones y los incluye en las copias de seguridad del complemento.

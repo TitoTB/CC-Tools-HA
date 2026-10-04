@@ -3,7 +3,7 @@ import { normalizeGcodeFiles, normalizeGcodeRecords } from './finishPrintSelecti
 const PROFILE_FIELDS = [
   'windowStart', 'windowEnd', 'dailyLimit', 'minIntervalMinutes',
   'printMode',
-  'printerName', 'printerDeviceId', 'printerDeviceName', 'printerInterName', 'printerDeviceType',
+  'printerName', 'printerDeviceId', 'printerDeviceName', 'printerTelemetryId', 'printerInterName', 'printerDeviceType', 'printerImageUrl',
   'cloudFiles', 'cloudFileRecords', 'fileUsageCounts', 'shuffleBag', 'shuffleBagCursor',
   'discoveryUpdatedAt', 'printPlanDate', 'printPlan', 'printPlanCursor',
   'printPlanDoneCount', 'nextRunAt'
@@ -83,12 +83,14 @@ function normalizeProfile(profile = {}, index = 0) {
     printerName: String(profile.printerName || '').trim().slice(0, 120),
     printerDeviceId: String(profile.printerDeviceId || '').trim().slice(0, 120),
     printerDeviceName: String(profile.printerDeviceName || '').trim().slice(0, 160),
+    printerTelemetryId: String(profile.printerTelemetryId || '').trim().slice(0, 160),
     printerInterName: String(profile.printerInterName || '').trim().slice(0, 120),
     printerDeviceType: profile.printerDeviceType !== null
       && profile.printerDeviceType !== ''
       && Number.isFinite(Number(profile.printerDeviceType))
       ? Number(profile.printerDeviceType)
       : null,
+    printerImageUrl: String(profile.printerImageUrl || '').trim().slice(0, 1000),
     cloudFiles,
     cloudFileRecords,
     fileUsageCounts: profile.fileUsageCounts && typeof profile.fileUsageCounts === 'object' ? { ...profile.fileUsageCounts } : {},

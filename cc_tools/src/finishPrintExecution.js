@@ -37,12 +37,22 @@ export function buildSelectDeviceUrl(gcodeId) {
   return `${SELECT_DEVICE_BASE_URL}/${encodeURIComponent(String(gcodeId || '').trim())}?type=1`;
 }
 
-export function validatePrintCheck(response) {
+export function validatePrintCheck(response, context = {}) {
   if (response?.code !== 0) {
-    throw executionError('FINISH_PRINT_CHECK_REJECTED', response?.msg || 'Creality Cloud rechazó la validación del G-code.');
+    throw printCheckError(
+      'FINISH_PRINT_CHECK_REJECTED',
+      response?.msg || 'Creality Cloud rechazó la validación del G-code.',
+      response,
+      context
+    );
   }
   if (Number(response?.result?.printable) !== 1) {
-    throw executionError('FINISH_PRINT_NOT_PRINTABLE', 'El G-code seleccionado no se puede imprimir en la impresora virtual.');
+    throw printCheckError(
+      'FINISH_PRINT_NOT_PRINTABLE',
+      'El G-code seleccionado no se puede imprimir en la impresora virtual.',
+      response,
+      context
+    );
   }
   return response.result;
 }
@@ -68,20 +78,58 @@ export function parsePrintRecord(response) {
   }
   const record = response.result;
   const printState = Number(record.printState);
+  const printError = Number(record.printErr || 0);
+  const printErrorDetail = [
+    record.errorMessage,
+    record.errorMsg,
+    record.errMsg,
+    record.errorDesc,
+    record.errDesc,
+    record.failReason
+  ].map((value) => String(value || '').trim()).find(Boolean) || '';
+  const printStartTime = Number(record.printStartTime || 0);
+  const printEndTime = Number(record.printEndTime || 0);
+  const failed = [3, 4].includes(printState) || printError > 0;
+  const completed = !failed && printEndTime > 0 && printEndTime >= printStartTime && ![1, 5].includes(printState);
   return {
     printId: String(record.id || '').trim(),
     gcodeId: String(record.gcodeId || '').trim(),
     name: String(record.name || record.gcodeInfo?.name || '').trim(),
     printState,
-    printError: Number(record.printErr || 0),
+    printError,
+    printErrorDetail,
     printJobTime: Number(record.printJobTime || 0),
-    printStartTime: Number(record.printStartTime || 0),
-    printEndTime: Number(record.printEndTime || 0),
-    completed: printState === 2 && Number(record.printEndTime || 0) > 0
+    printStartTime,
+    printEndTime,
+    completed,
+    failed,
+    active: [1, 5].includes(printState),
+    paused: printState === 5,
+    stateLabel: ({ 0: 'En reposo', 1: 'Imprimiendo', 2: 'Finalizada', 3: 'Error', 4: 'Detenida', 5: 'Pausada' })[printState]
+      || `Estado ${Number.isFinite(printState) ? printState : 'desconocido'}`,
+    diagnostics: {
+      printState,
+      printError,
+      printErrorDetail,
+      printStartTime,
+      printEndTime,
+      printJobTime: Number(record.printJobTime || 0),
+      deviceName: String(record.deviceName || record.dn || '').trim(),
+      deviceType: record.deviceType ?? null,
+      model: String(record.model || '').trim()
+    }
   };
 }
 
-export function executeVirtualPrint({ deviceName, file, timezone = 'Europe/Madrid' }) {
+export function executeVirtualPrint({
+  printerName,
+  deviceId,
+  deviceName,
+  printerInterName,
+  deviceType,
+  file,
+  timezone = 'Europe/Madrid'
+}) {
   const gcodeId = String(file?.id || '').trim();
   const fileName = String(file?.name || '').trim();
   const normalizedDeviceName = String(deviceName || '').trim();
@@ -102,13 +150,30 @@ export function executeVirtualPrint({ deviceName, file, timezone = 'Europe/Madri
         requireTaskList: true
       });
       const authenticationHeaders = await workbenchAuthenticationHeaders(page, gcodeId);
+      const checkPayload = buildPrintCheckPayload({ deviceName: normalizedDeviceName, gcodeId });
       const check = await requestJson(
         page,
         CHECK_PRINT_PATH,
-        buildPrintCheckPayload({ deviceName: normalizedDeviceName, gcodeId }),
+        checkPayload,
         authenticationHeaders
       );
-      validatePrintCheck(check);
+      validatePrintCheck(check, {
+        endpoint: CHECK_PRINT_PATH,
+        request: checkPayload,
+        printer: {
+          name: String(printerName || '').trim(),
+          deviceId: String(deviceId || '').trim(),
+          deviceName: normalizedDeviceName,
+          printerInterName: String(printerInterName || '').trim(),
+          deviceType: Number.isFinite(Number(deviceType)) ? Number(deviceType) : null
+        },
+        gcode: {
+          id: gcodeId,
+          name: fileName,
+          printTime: Math.max(0, Number(file?.printTime) || 0)
+        },
+        selectDeviceUrl: buildSelectDeviceUrl(gcodeId)
+      });
       const task = await requestJson(
         page,
         ADD_PRINT_TASK_PATH,
@@ -147,6 +212,9 @@ export function verifyVirtualPrint({ printId, gcodeId, rewardBefore, timezone = 
         authenticationHeaders
       );
       const printRecord = parsePrintRecord(response);
+      if (printRecord.failed) {
+        return { status: 'failed', printRecord };
+      }
       if (!printRecord.completed) {
         return { status: 'printing', printRecord };
       }
@@ -269,4 +337,18 @@ async function requestJson(page, path, body, authenticationHeaders) {
 
 function executionError(code, message) {
   return Object.assign(new Error(message), { code });
+}
+
+function printCheckError(code, message, response, context = {}) {
+  const error = executionError(code, message);
+  error.technical = JSON.stringify({
+    stage: 'checkGcodePrintDevice',
+    endpoint: context.endpoint || CHECK_PRINT_PATH,
+    request: context.request || null,
+    printer: context.printer || null,
+    gcode: context.gcode || null,
+    selectDeviceUrl: context.selectDeviceUrl || '',
+    response: response || null
+  });
+  return error;
 }

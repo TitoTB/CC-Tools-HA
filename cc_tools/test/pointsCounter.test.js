@@ -121,6 +121,40 @@ test('traduce las tareas generales del historial de puntos', () => {
   ]);
 });
 
+test('separa una conversión del encabezado y los filtros de la página', () => {
+  const header = '9,075 Puntos estándar Tienda de regalos 0 Puntos Spotlight Convertir Tareas Puntos All Tipo 1 mes Todo Ingresos: 5,838 Gastos: 3,723';
+  const result = parsePointsSummary(`
+    ${header} Convert 2026-09-28 09:30:00 + 132
+  `, { timezone: 'Europe/Madrid', now: new Date('2026-09-28T10:00:00Z') });
+
+  assert.deepEqual(result.transactions, [{
+    date: '2026-09-28',
+    time: '09:30:00',
+    amount: 132,
+    type: 'Conversión',
+    sourceType: 'Convert'
+  }]);
+});
+
+test('repara una conversión guardada con el encabezado completo como nombre', () => {
+  const sourceType = '9,075 Puntos estándar Tienda de regalos 0 Puntos Spotlight Convertir Tareas Puntos All Tipo 1 mes Todo Ingresos: 5,838 Gastos: 3,723 Convert';
+  const transactions = mergePointTransactions([{
+    date: '2026-09-28',
+    time: '09:30:00',
+    amount: 132,
+    type: sourceType,
+    sourceType
+  }], []);
+
+  assert.deepEqual(transactions, [{
+    date: '2026-09-28',
+    time: '09:30:00',
+    amount: 132,
+    type: 'Conversión',
+    sourceType: 'Convert'
+  }]);
+});
+
 test('conserva dos tipos de check-in con la misma hora e importe', () => {
   const parsed = parsePointsSummary(`
     Consecutive Check-in 2026-09-25 07:36:09 + 40
