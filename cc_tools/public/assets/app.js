@@ -3469,7 +3469,7 @@ async function saveWizardTelegram({ requireCredentials = false } = {}) {
 }
 
 function maybeShowWizard() {
-  if (!state.config.setup?.assistantCompleted) {
+  if (!state.config.setup?.assistantCompleted && fields.wizardModal.hidden) {
     $('#wizard-telegram-chat').value = fields.telegramChat.value;
     showWizardStep(1);
     fields.wizardModal.hidden = false;

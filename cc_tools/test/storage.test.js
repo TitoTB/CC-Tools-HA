@@ -70,6 +70,19 @@ test('activa por defecto la prioridad de favoritos y todo el catálogo', async (
   assert.equal(config.tasks.modelDownloads.prioritizeFavorites, true);
   assert.deepEqual(config.tasks.modelDownloads.catalogCategories, []);
   assert.equal(config.tasks.modelDownloads.cleanupAfterHours, 1);
+  assert.equal(config.tasks.modelDownloads.dailyLimit, 30);
+  assert.equal(config.tasks.modelDownloads.windowStart, '08:00');
+  assert.equal(config.tasks.modelDownloads.windowEnd, '14:00');
+});
+
+test('conserva el límite de descargas elegido al actualizar', async () => {
+  const config = await storage.readConfig();
+  config.tasks.modelDownloads.dailyLimit = 7;
+  config.tasks.modelDownloads.windowEnd = '18:00';
+  await storage.writeConfig(config);
+  const saved = await storage.readConfig();
+  assert.equal(saved.tasks.modelDownloads.dailyLimit, 7);
+  assert.equal(saved.tasks.modelDownloads.windowEnd, '18:00');
 });
 
 test('limpia descargas temporales vencidas y conserva las recientes', async () => {

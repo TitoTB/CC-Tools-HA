@@ -133,9 +133,9 @@ const DEFAULT_CONFIG = {
     modelDownloads: {
       enabled: false,
       windowStart: '08:00',
-      windowEnd: '12:00',
+      windowEnd: '14:00',
       timezone: 'Europe/Madrid',
-      dailyLimit: 1,
+      dailyLimit: 30,
       minIntervalMinutes: 10,
       cleanupAfterHours: 1,
       prioritizeFavorites: true,

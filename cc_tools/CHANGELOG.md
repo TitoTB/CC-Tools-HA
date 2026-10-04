@@ -1,12 +1,22 @@
 # Changelog
 
-## 1.0.17
+## 1.0.18
 
-- Integra todas las mejoras de la versión 1.0.16.
+- Integra la versión 1.0.17 de TitoTB, incluida la comprobación de sesión, el límite de ocho minutos por tarea y la liberación del navegador al abrir el inicio de sesión.
+- Mantiene el paso actual del asistente al guardar o probar Telegram, sin volver al inicio.
+- Configura 30 descargas diarias y una ventana de 08:00 a 14:00 en instalaciones nuevas, conservando los ajustes existentes al actualizar.
+- Mantiene activo el temporizador del límite de ejecución hasta que termine la tarea o se agote el plazo.
 - Recupera Añadir a la colección de CC Tools Dev 1.0.13: ejecución manual, programación, columna y filtro de diseños, notificaciones y API de Home Assistant.
 - Conserva la configuración de colecciones al actualizar y comprueba el punto de Collection Models antes de registrar éxito.
 - Si aparece el Recordatorio de reposición durante el check-in, marca «No recordar de nuevo en este ciclo», pulsa «Hecho» y vuelve a intentarlo una vez si sigue pendiente.
 - No registra éxito por cerrar el aviso: exige la recompensa o el estado Registrado y conserva una captura si no puede completar el proceso.
+
+## 1.0.17
+
+- Comprueba la sesión de Creality Cloud antes de iniciar cada automatización y avisa cuando haya caducado.
+- Finaliza las tareas bloqueadas tras ocho minutos, libera Chromium y reprograma el mismo turno automáticamente.
+- Permite que el botón de inicio de sesión cancele una automatización que esté reteniendo el navegador.
+- Registra en el log del contenedor el inicio, el final y la duración de cada tarea.
 
 ## 1.0.16
 

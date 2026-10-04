@@ -2,8 +2,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
 import { browserSessionDir } from './storage.js';
+import { inspectCrealityPage } from './crealityDiagnostics.js';
 
 const PROFILE_LOCK_FILES = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lock'];
+const SESSION_CHECK_URL = 'https://www.crealitycloud.com/es';
 let activeContext = null;
 let activeMode = '';
 let activeBrowserVersion = '';
@@ -24,6 +26,7 @@ export async function withAutomationBrowser(options, callback) {
     );
     activeBrowserVersion = activeContext.browser()?.version() || '';
     watchContext(activeContext);
+    await assertAuthenticatedSession(activeContext);
     return await callback(activeContext);
   } catch (error) {
     throw normalizeBrowserError(error);
@@ -124,6 +127,12 @@ export function browserManagerState() {
 
 export async function shutdownBrowser() {
   await closeActiveContext();
+}
+
+export async function abortAutomationBrowser() {
+  if (activeMode !== 'automation') return false;
+  await closeActiveContext();
+  return true;
 }
 
 export function normalizeBrowserError(error) {
@@ -285,6 +294,26 @@ async function closeActiveContext() {
   activeMode = '';
   activeBrowserVersion = '';
   if (context) await context.close().catch(() => {});
+}
+
+async function assertAuthenticatedSession(context) {
+  const page = context.pages()[0] || await context.newPage();
+  await page.goto(SESSION_CHECK_URL, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000
+  });
+  await page.waitForTimeout(750);
+  const diagnostic = await inspectCrealityPage(page, null);
+  if (!diagnostic || ![
+    'LOGIN_REQUIRED',
+    'SECURITY_CHALLENGE'
+  ].includes(diagnostic.code)) return;
+
+  const error = new Error(diagnostic.message);
+  error.code = diagnostic.code;
+  error.systemic = true;
+  error.diagnostic = diagnostic;
+  throw error;
 }
 
 function watchContext(context) {

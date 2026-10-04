@@ -21,7 +21,7 @@ import {
   tempDownloadsDir,
   writeConfig
 } from './storage.js';
-import { startScheduler, runTaskNow, schedulerState } from './scheduler.js';
+import { cancelRunningTask, startScheduler, runTaskNow, schedulerState } from './scheduler.js';
 import { generateDownloadPlan, scheduleNextRun } from './timeWindow.js';
 import { sendTelegram } from './telegram.js';
 import { browserManagerState, shutdownBrowser, withAutomationBrowser } from './browserManager.js';
@@ -1207,6 +1207,16 @@ async function appendManualDesignActionRun({
 
 app.post('/api/tasks/creality/login/open', async (req, res) => {
   try {
+    if (schedulerState().running) {
+      const cancellation = await cancelRunningTask('login');
+      if (!cancellation.cancelled) {
+        return res.status(409).json({
+          ok: false,
+          error: 'TASK_CANCELLATION_TIMEOUT',
+          message: 'No se pudo liberar el navegador automáticamente. Reinicia CC Tools e inténtalo de nuevo.'
+        });
+      }
+    }
     const result = await openLoginBrowser();
     res.json({
       ok: true,
