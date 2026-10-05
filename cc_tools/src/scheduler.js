@@ -289,7 +289,6 @@ export function executeWithTimeout(operation, options = {}) {
         console.error('[scheduler] No se pudo cerrar Chromium tras agotar el tiempo:', abortError?.message || String(abortError));
       });
     }, timeoutMs);
-    timer.unref?.();
   });
   return Promise.race([Promise.resolve(operation), timeout])
     .finally(() => clearTimeout(timer));
