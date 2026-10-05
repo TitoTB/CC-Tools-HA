@@ -294,4 +294,12 @@ test('distingue el inicio programado del registro final de verificación', () =>
       failures: [{ code: 'FINISH_PRINT_VERIFICATION_ERROR' }]
     }
   }), false);
+  assert.equal(isFinishPrintStartRun({
+    taskId: 'finishPrint',
+    source: 'schedule',
+    status: 'skipped',
+    details: {
+      diagnostics: [{ code: 'TASK_EXECUTION_TIMEOUT' }]
+    }
+  }), false);
 });

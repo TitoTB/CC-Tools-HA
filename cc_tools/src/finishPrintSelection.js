@@ -61,7 +61,7 @@ export function isFinishPrintStartRun(run) {
   if (run?.taskId !== 'finishPrint') return false;
   if (run?.details?.printRecord) return false;
   if (run?.details?.printId) return true;
-  return run?.source === 'schedule';
+  return run?.source === 'schedule' && run?.status !== 'skipped';
 }
 
 export function normalizePrintMode(mode) {

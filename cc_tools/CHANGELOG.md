@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.19
+
+- Trata los timeouts recuperables del planificador como reintentos aplazados y conserva su diagnóstico en Logs.
+- Evita que esos bloqueos transitorios consuman una posición del plan diario de impresiones.
+- Suprime las alertas de Telegram para timeouts que se reprograman automáticamente.
+
 ## 1.0.18
 
 - Cierra automáticamente el recordatorio de reposición del check-in después de marcar que no vuelva a mostrarse durante el ciclo.

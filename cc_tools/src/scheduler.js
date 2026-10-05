@@ -209,25 +209,40 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
       return { status: 'skipped', message: error.message };
     }
 
-    const { runMessage, details } = await appendExecutionError(taskId, source, startedAt, error);
+    const scheduledTimeout = source === 'schedule' && error.code === 'TASK_EXECUTION_TIMEOUT';
+    const retryMessage = scheduledTimeout
+      ? `${error.message} Se reintentará automáticamente.`
+      : '';
+    const { runMessage, details } = await appendExecutionError(taskId, source, startedAt, error, {
+      status: scheduledTimeout ? 'skipped' : 'error',
+      message: retryMessage
+    });
     error.runLogged = true;
 
     const freshConfig = await readConfig();
     freshConfig.tasks[taskId].lastRunAt = new Date().toISOString();
-    freshConfig.tasks[taskId].lastStatus = 'error';
+    freshConfig.tasks[taskId].lastStatus = scheduledTimeout ? 'skipped' : 'error';
     freshConfig.tasks[taskId].lastMessage = runMessage;
     const failedResult = { success: false, details };
-    if (source === 'schedule' && error.code === 'TASK_EXECUTION_TIMEOUT') {
+    if (scheduledTimeout) {
       delayPendingTaskPlan(
         freshConfig.tasks[taskId],
         taskId,
         new Date(Date.now() + SILENT_RETRY_MINUTES * 60 * 1000)
       );
+      if (taskId === 'finishPrint') {
+        syncActiveFinishPrintProfile(freshConfig.tasks.finishPrint);
+        activateNextFinishPrintProfile(freshConfig.tasks.finishPrint);
+      }
     } else {
       updateNextRunAfterExecution(freshConfig.tasks[taskId], taskId, source, failedResult);
     }
-    const healthEvent = updateAutomationHealth(freshConfig, taskId, 'error', failedResult);
+    const healthEvent = scheduledTimeout
+      ? {}
+      : updateAutomationHealth(freshConfig, taskId, 'error', failedResult);
     await writeConfig(freshConfig);
+
+    if (scheduledTimeout) return { status: 'skipped', message: runMessage };
 
     await notifyTaskResult(freshConfig, taskId, 'error', failedResult, healthEvent);
     throw error;
@@ -590,9 +605,9 @@ export function boostAvailabilityRefreshDue(taskConfig = {}, now = new Date()) {
   return !Number.isFinite(checkedAt) || now.getTime() - checkedAt >= 30 * 60 * 1000;
 }
 
-async function appendExecutionError(taskId, source, startedAt, error) {
+async function appendExecutionError(taskId, source, startedAt, error, options = {}) {
   const message = error.message || String(error);
-  const runMessage = taskId === 'creality' ? 'Check-in fallido' : message;
+  const runMessage = options.message || (taskId === 'creality' ? 'Check-in fallido' : message);
   const diagnostic = await diagnoseTaskError(error, null, null, {
     code: error.code || 'TASK_EXECUTION_ERROR',
     category: 'technical',
@@ -614,7 +629,7 @@ async function appendExecutionError(taskId, source, startedAt, error) {
   await appendRun({
     taskId,
     source,
-    status: 'error',
+    status: options.status || 'error',
     message: runMessage,
     startedAt,
     finishedAt: new Date().toISOString(),
