@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.18
+
+- Cierra automáticamente el recordatorio de reposición del check-in después de marcar que no vuelva a mostrarse durante el ciclo.
+- Reintenta el descubrimiento de impresoras cuando el Banco de trabajo carga lentamente o desde caché.
+- Evita que los registros de seguimiento y verificación consuman posiciones adicionales del plan diario de impresiones.
+- Mantiene la plantilla actualizada de Telegram para pedidos disponibles.
+
 ## 1.0.17
 
 - Comprueba la sesión de Creality Cloud antes de iniciar cada automatización y avisa cuando haya caducado.

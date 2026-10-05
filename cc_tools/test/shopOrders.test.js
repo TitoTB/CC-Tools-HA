@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeShopOrder } from '../src/shopOrders.js';
+import { formatAvailableShopOrderTelegram } from '../src/shopOrderNotifications.js';
 import {
   archiveShopOrder,
   mergeShopOrdersState,
@@ -145,4 +146,14 @@ test('actualiza pedidos una vez cada 24 horas y reintenta errores tras una hora'
   assert.equal(shopOrdersRefreshDue({ schemaVersion: 2, lastAttemptAt: '2026-09-27T11:30:00.000Z' }, now), false);
   assert.equal(shopOrdersRefreshDue({ schemaVersion: 2, lastAttemptAt: '2026-09-27T10:30:00.000Z' }, now), true);
   assert.equal(shopOrdersRefreshDue({ updatedAt: '2026-09-27T11:59:00.000Z' }, now), true);
+});
+
+test('enlaza el nombre del producto en la notificación de pedido disponible', () => {
+  const message = formatAvailableShopOrderTelegram({
+    title: 'Filamento <PETG>',
+    points: 3473,
+    useUrl: 'https://store.creality.com/es/product?discountCode=A&B'
+  });
+  assert.equal(message, '📦 CC Tools: Pedido disponible\n<a href="https://store.creality.com/es/product?discountCode=A&amp;B">Filamento &lt;PETG&gt;</a>\n3473 puntos');
+  assert.equal(message.split('\n').length, 3);
 });

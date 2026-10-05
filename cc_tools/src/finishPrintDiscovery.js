@@ -8,6 +8,7 @@ const GCODE_OWNER_LIST_PATH = '/api/cxy/v2/gcode/ownerList';
 const GCODE_PAGE_SIZE = 3;
 const GCODE_LIBRARY_PAGE_SIZE = 12;
 const MAX_GCODE_PAGES = 50;
+const DEVICE_DISCOVERY_WAIT_MS = 8000;
 
 export function discoverPrinters() {
   return withAutomationBrowser({}, async (context) => {
@@ -18,18 +19,21 @@ export function discoverPrinters() {
     await page.waitForTimeout(1500);
     ensureWorkbenchSession(page, await collectSurfaceText(page));
 
-    const [response, groupsResponse] = await Promise.all([
-      settleWithin(deviceListResponse, 2500),
-      settleWithin(deviceGroupsResponse, 2500)
+    let [response, groupsResponse] = await Promise.all([
+      settleWithin(deviceListResponse, DEVICE_DISCOVERY_WAIT_MS),
+      settleWithin(deviceGroupsResponse, DEVICE_DISCOVERY_WAIT_MS)
     ]);
-    const [payload, groupsPayload] = await Promise.all([
-      response?.json().catch(() => null),
-      groupsResponse?.json().catch(() => null)
-    ]);
-    const responsePrinters = mergeDiscoveredPrinters([
-      ...parsePrinterResponse(payload),
-      ...parsePrinterResponse(groupsPayload)
-    ]);
+    let responsePrinters = await printersFromResponses(response, groupsResponse);
+    if (!responsePrinters.length && (!response || !groupsResponse)) {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1500);
+      ensureWorkbenchSession(page, await collectSurfaceText(page));
+      [response, groupsResponse] = await Promise.all([
+        settleWithin(deviceListResponse, DEVICE_DISCOVERY_WAIT_MS),
+        settleWithin(deviceGroupsResponse, DEVICE_DISCOVERY_WAIT_MS)
+      ]);
+      responsePrinters = await printersFromResponses(response, groupsResponse);
+    }
     if (responsePrinters.length) return responsePrinters;
 
     const sources = await collectTextSources(page);
@@ -45,6 +49,17 @@ export function discoverPrinters() {
     }
     return printers;
   });
+}
+
+async function printersFromResponses(response, groupsResponse) {
+  const [payload, groupsPayload] = await Promise.all([
+    response?.json().catch(() => null),
+    groupsResponse?.json().catch(() => null)
+  ]);
+  return mergeDiscoveredPrinters([
+    ...parsePrinterResponse(payload),
+    ...parsePrinterResponse(groupsPayload)
+  ]);
 }
 
 export function discoverGcodeFiles(printer = {}) {
@@ -384,7 +399,7 @@ function waitForDeviceGroups(page) {
 
 function waitForEndpoint(page, path) {
   return page.waitForResponse((response) =>
-    response.request().method() === 'POST' && response.url().includes(path),
+    ['GET', 'POST'].includes(response.request().method()) && response.url().includes(path),
   { timeout: 45000 }).catch(() => null);
 }
 

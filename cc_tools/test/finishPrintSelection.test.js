@@ -285,4 +285,13 @@ test('distingue el inicio programado del registro final de verificación', () =>
     source: 'schedule',
     details: { printRecord: { printId: 'print-1', completed: true } }
   }), false);
+  assert.equal(isFinishPrintStartRun({
+    taskId: 'finishPrint',
+    source: 'schedule',
+    details: {
+      printId: 'print-1',
+      printRecord: { printId: 'print-1', completed: false },
+      failures: [{ code: 'FINISH_PRINT_VERIFICATION_ERROR' }]
+    }
+  }), false);
 });

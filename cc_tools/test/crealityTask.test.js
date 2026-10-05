@@ -1,6 +1,64 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCheckinRunMessage, raffleFailure, reconcileRafflePoints } from '../src/crealityTask.js';
+import {
+  buildCheckinRunMessage,
+  dismissReplenishmentReminder,
+  raffleFailure,
+  reconcileRafflePoints
+} from '../src/crealityTask.js';
+
+test('marca el recordatorio de reposición antes de cerrarlo', async () => {
+  const actions = [];
+  let checked = false;
+  let visible = true;
+  const emptyLocator = {
+    first() { return this; },
+    filter() { return this; },
+    async count() { return 0; }
+  };
+  const checkbox = {
+    first() { return this; },
+    async count() { return 1; },
+    async isChecked() { return checked; },
+    async check() {
+      checked = true;
+      actions.push('checkbox');
+    },
+    async click() {}
+  };
+  const doneButton = {
+    first() { return this; },
+    filter() { return this; },
+    async count() { return 1; },
+    async click() {
+      actions.push('done');
+      visible = false;
+    }
+  };
+  const dialog = {
+    locator(selector) {
+      if (selector === 'input[type="checkbox"]') return checkbox;
+      if (selector.startsWith('button,')) return doneButton;
+      return emptyLocator;
+    },
+    getByText() { return emptyLocator; },
+    async isVisible() { return visible; },
+    async waitFor() {
+      if (visible) throw new Error('El diálogo sigue visible');
+    }
+  };
+  const dialogs = {
+    filter() { return this; },
+    async count() { return 1; },
+    nth() { return dialog; }
+  };
+  const root = {
+    locator() { return dialogs; }
+  };
+
+  assert.equal(await dismissReplenishmentReminder(root), true);
+  assert.deepEqual(actions, ['checkbox', 'done']);
+});
 
 test('conserva los premios y boletos pendientes cuando la lotería queda parcial', () => {
   assert.deepEqual(

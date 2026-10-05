@@ -17,6 +17,9 @@ const CHECKIN_URL = 'https://www.crealitycloud.com/check-in';
 const CHECKIN_BUTTON_SELECTOR = '.sign-in-action .sign-in-btn';
 const CHECKIN_AVAILABLE_RE = /^(registrar|check\s*in\s*today)$/i;
 const CHECKIN_DONE_RE = /^(registrado|checked\s*in)$/i;
+const REPLENISHMENT_REMINDER_RE = /recordatorio\s+de\s+reposici[oó]n|replenish(?:ment)?\s+reminder|replenish.*consecutive\s+rewards/i;
+const REPLENISHMENT_CHECKBOX_RE = /no\s+recordar(?:me)?\s+de\s+nuevo\s+en\s+este\s+ciclo|don['’]?t\s+remind\s+me\s+again(?:\s+in\s+this\s+cycle)?/i;
+const REPLENISHMENT_DONE_RE = /^(hecho|done|got\s*it)$/i;
 
 export async function openLoginBrowser() {
   await openInteractiveBrowser(CHECKIN_URL);
@@ -151,6 +154,7 @@ async function executeCheckin(page, screenshots, observer) {
     await button.scrollIntoViewIfNeeded().catch(() => {});
     await button.click({ timeout: 6000 });
     await page.waitForTimeout(5000);
+    await dismissReplenishmentReminder(container, { timeout: 3000 });
 
     const rewardText = await findRewardText(container);
     const finalButtonText = normalize(await button.textContent().catch(() => ''));
@@ -236,6 +240,7 @@ export async function executeRaffle(page, screenshots = [], options = {}) {
   const prizes = [];
   const initialTickets = tickets;
   for (let attempt = 1; tickets > 0 && attempt <= 10; attempt += 1) {
+    await dismissReplenishmentReminder(page, { timeout: 500 });
     const previousDialog = await findVisibleRaffleDialog(page);
     if (previousDialog && !(await dismissDialog(page, previousDialog))) {
       screenshots.push(await takeScreenshot(page, `raffle-dialog-blocked-${attempt}`));
@@ -302,6 +307,72 @@ export async function executeRaffle(page, screenshots = [], options = {}) {
     remainingTickets: tickets,
     prizes
   };
+}
+
+export async function dismissReplenishmentReminder(root, options = {}) {
+  const timeout = Math.max(0, Number(options.timeout) || 0);
+  const deadline = Date.now() + timeout;
+  let dialog = null;
+
+  do {
+    dialog = await findVisibleReplenishmentReminder(root);
+    if (dialog || Date.now() >= deadline) break;
+    await waitOnRoot(root, 200);
+  } while (Date.now() < deadline);
+
+  if (!dialog) return false;
+
+  const checkboxInput = dialog.locator('input[type="checkbox"]').first();
+  if (await checkboxInput.count()) {
+    const checked = await checkboxInput.isChecked().catch(() => false);
+    if (!checked) {
+      await checkboxInput.check({ force: true }).catch(() => checkboxInput.click({ force: true }).catch(() => {}));
+    }
+  } else {
+    const checkbox = dialog.locator('[role="checkbox"], label, .el-checkbox, .van-checkbox')
+      .filter({ hasText: REPLENISHMENT_CHECKBOX_RE })
+      .first();
+    if (await checkbox.count()) {
+      const checked = await checkbox.getAttribute('aria-checked').catch(() => null);
+      const className = await checkbox.getAttribute('class').catch(() => '');
+      if (checked !== 'true' && !/\bis-checked\b|\bchecked\b/.test(className || '')) {
+        await checkbox.click({ force: true }).catch(() => {});
+      }
+    }
+  }
+
+  const doneButton = dialog.locator('button, [role="button"], .el-button, .van-button, .cus-button')
+    .filter({ hasText: REPLENISHMENT_DONE_RE })
+    .first();
+  if (await doneButton.count()) {
+    await doneButton.click({ timeout: 3000, force: true }).catch(() => {});
+  } else {
+    await dialog.getByText(REPLENISHMENT_DONE_RE, { exact: true }).first()
+      .click({ timeout: 3000, force: true })
+      .catch(() => {});
+  }
+
+  return dialog.waitFor({ state: 'hidden', timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+}
+
+async function findVisibleReplenishmentReminder(root) {
+  const dialogs = root.locator('.el-dialog__wrapper, [role="dialog"], .van-dialog, [class*="dialog"]')
+    .filter({ hasText: REPLENISHMENT_REMINDER_RE });
+  for (let index = (await dialogs.count()) - 1; index >= 0; index -= 1) {
+    const dialog = dialogs.nth(index);
+    if (await dialog.isVisible().catch(() => false)) return dialog;
+  }
+  return null;
+}
+
+async function waitOnRoot(root, timeout) {
+  if (typeof root.waitForTimeout === 'function') {
+    await root.waitForTimeout(timeout);
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, timeout));
 }
 
 async function findRewardText(container) {

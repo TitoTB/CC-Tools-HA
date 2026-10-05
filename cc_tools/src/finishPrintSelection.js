@@ -59,8 +59,9 @@ export function countCreditedFinishPrintRun(run) {
 
 export function isFinishPrintStartRun(run) {
   if (run?.taskId !== 'finishPrint') return false;
+  if (run?.details?.printRecord) return false;
   if (run?.details?.printId) return true;
-  return run?.source === 'schedule' && !run?.details?.printRecord;
+  return run?.source === 'schedule';
 }
 
 export function normalizePrintMode(mode) {
