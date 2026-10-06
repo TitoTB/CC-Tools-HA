@@ -1,0 +1,151 @@
+name: Reportar un error
+description: Informa de un problema en el complemento CC Tools para Home Assistant.
+title: "[Error]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por ayudarnos a mejorar CC Tools. Completa todos los campos obligatorios para que podamos reproducir y analizar el problema.
+
+        Antes de publicar, elimina de los logs cualquier token, cookie, contraseña, dirección o dato personal.
+
+  - type: input
+    id: cc_tools_version
+    attributes:
+      label: Versión de CC Tools
+      description: Puedes verla en la página del complemento de Home Assistant.
+      placeholder: "Ejemplo: 1.0.19"
+    validations:
+      required: true
+
+  - type: input
+    id: home_assistant_version
+    attributes:
+      label: Versión de Home Assistant
+      placeholder: "Ejemplo: 2026.10.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: installation
+    attributes:
+      label: Instalación de Home Assistant
+      description: Indica dónde está instalado y el dispositivo, servidor o hipervisor utilizado.
+      placeholder: "Ejemplo: Home Assistant OS en una máquina virtual de Proxmox sobre un mini PC Intel N100."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Arquitectura
+      options:
+        - amd64
+        - aarch64
+        - No lo sé
+    validations:
+      required: true
+
+  - type: input
+    id: memory
+    attributes:
+      label: Memoria RAM asignada
+      placeholder: "Ejemplo: 4 GB"
+    validations:
+      required: true
+
+  - type: input
+    id: storage
+    attributes:
+      label: Almacenamiento asignado y disponible
+      placeholder: "Ejemplo: 32 GB asignados, 12 GB disponibles"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected_area
+    attributes:
+      label: Apartado afectado
+      options:
+        - Instalación o actualización
+        - Asistente inicial o inicio de sesión
+        - Check-in diario
+        - Impresiones
+        - Descarga de diseños
+        - Me gusta
+        - Comentarios
+        - Boosts
+        - Puntos, objetivos o pedidos
+        - Notificaciones
+        - Interfaz web
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descripción del error
+      description: Explica qué ocurrió, cuándo comenzó y si sucede siempre o de forma intermitente.
+      placeholder: Describe el problema con el mayor detalle posible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Pasos para reproducirlo
+      description: Enumera las acciones realizadas justo antes de que apareciera el error.
+      placeholder: |
+        1. Abrí...
+        2. Pulsé...
+        3. Apareció...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+      placeholder: Indica qué debería haber ocurrido.
+    validations:
+      required: true
+
+  - type: input
+    id: occurrence_time
+    attributes:
+      label: Fecha y hora aproximadas
+      description: Ayuda a relacionar el problema con los registros.
+      placeholder: "Ejemplo: 06/10/2026 a las 10:35 (Europe/Madrid)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: application_logs
+    attributes:
+      label: Logs del error en CC Tools
+      description: Copia el registro completo desde el apartado Logs de la aplicación, incluidos el diagnóstico y los datos técnicos.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: addon_logs
+    attributes:
+      label: Logs del complemento
+      description: Opcional. Añade los registros de la pestaña Registro del complemento si contienen información relacionada.
+      render: shell
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Capturas u otra información
+      description: Arrastra aquí capturas de pantalla o añade cualquier dato que pueda ayudar al diagnóstico.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacidad
+      options:
+        - label: He revisado los logs y he eliminado tokens, cookies, contraseñas y datos personales.
+          required: true
