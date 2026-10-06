@@ -18,47 +18,26 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: home_assistant_version
+  - type: textarea
+    id: environment
     attributes:
-      label: Versión de Home Assistant
-      placeholder: "Ejemplo: 2026.10.1"
+      label: Entorno de Home Assistant
+      description: Indica la versión de Home Assistant, la arquitectura y dónde está instalado.
+      placeholder: |
+        Versión de Home Assistant: 2026.10.1
+        Arquitectura: amd64
+        Instalación: Home Assistant OS en una máquina virtual de Proxmox sobre un mini PC Intel N100
     validations:
       required: true
 
   - type: textarea
-    id: installation
+    id: resources
     attributes:
-      label: Instalación de Home Assistant
-      description: Indica dónde está instalado y el dispositivo, servidor o hipervisor utilizado.
-      placeholder: "Ejemplo: Home Assistant OS en una máquina virtual de Proxmox sobre un mini PC Intel N100."
-    validations:
-      required: true
-
-  - type: dropdown
-    id: architecture
-    attributes:
-      label: Arquitectura
-      options:
-        - amd64
-        - aarch64
-        - No lo sé
-    validations:
-      required: true
-
-  - type: input
-    id: memory
-    attributes:
-      label: Memoria RAM asignada
-      placeholder: "Ejemplo: 4 GB"
-    validations:
-      required: true
-
-  - type: input
-    id: storage
-    attributes:
-      label: Almacenamiento asignado y disponible
-      placeholder: "Ejemplo: 32 GB asignados, 12 GB disponibles"
+      label: Recursos de la instancia
+      description: Indica la memoria RAM y el almacenamiento asignado y disponible.
+      placeholder: |
+        RAM: 4 GB
+        Almacenamiento: 32 GB asignados, 12 GB disponibles
     validations:
       required: true
 
@@ -94,29 +73,13 @@ body:
   - type: textarea
     id: reproduction
     attributes:
-      label: Pasos para reproducirlo
-      description: Enumera las acciones realizadas justo antes de que apareciera el error.
+      label: Reproducción y resultado esperado
+      description: Enumera las acciones realizadas y explica qué debería haber ocurrido.
       placeholder: |
         1. Abrí...
         2. Pulsé...
         3. Apareció...
-    validations:
-      required: true
-
-  - type: textarea
-    id: expected
-    attributes:
-      label: Resultado esperado
-      placeholder: Indica qué debería haber ocurrido.
-    validations:
-      required: true
-
-  - type: input
-    id: occurrence_time
-    attributes:
-      label: Fecha y hora aproximadas
-      description: Ayuda a relacionar el problema con los registros.
-      placeholder: "Ejemplo: 06/10/2026 a las 10:35 (Europe/Madrid)"
+        Resultado esperado: ...
     validations:
       required: true
 
@@ -130,22 +93,18 @@ body:
       required: true
 
   - type: textarea
-    id: addon_logs
+    id: additional_information
     attributes:
-      label: Logs del complemento
-      description: Opcional. Añade los registros de la pestaña Registro del complemento si contienen información relacionada.
-      render: shell
-
-  - type: textarea
-    id: screenshots
-    attributes:
-      label: Capturas u otra información
-      description: Arrastra aquí capturas de pantalla o añade cualquier dato que pueda ayudar al diagnóstico.
+      label: Información adicional
+      description: Añade la fecha y hora del fallo, los logs del complemento, capturas de pantalla u otros datos útiles.
+      placeholder: |
+        Fecha y hora aproximadas: 06/10/2026 a las 10:35 (Europe/Madrid)
+        Logs del complemento y capturas: ...
 
   - type: checkboxes
     id: privacy
     attributes:
       label: Privacidad
       options:
-        - label: He revisado los logs y he eliminado tokens, cookies, contraseñas y datos personales.
+        - label: He revisado el contenido y he eliminado cualquier dato privado o credencial.
           required: true
