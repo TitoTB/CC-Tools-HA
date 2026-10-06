@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBrowserError } from '../src/browserManager.js';
+import { normalizeBrowserError, sessionCheckUnavailableError } from '../src/browserManager.js';
 import {
   generalizedIncident,
   inspectCrealityPage,
@@ -34,6 +34,19 @@ test('una pestaña de Chromium caída se reintenta silenciosamente', () => {
   assert.equal(error.systemic, false);
   assert.equal(error.silentRetry, true);
   assert.match(error.technical, /Page crashed/);
+});
+
+test('una comprobación de sesión sin respuesta se reintenta sin asumir que se cerró la sesión', () => {
+  const error = sessionCheckUnavailableError(
+    new Error('page.goto: Timeout 30000ms exceeded.'),
+    'https://www.crealitycloud.com/es'
+  );
+
+  assert.equal(error.code, 'SESSION_CHECK_UNAVAILABLE');
+  assert.equal(error.systemic, false);
+  assert.equal(error.silentRetry, true);
+  assert.match(error.message, /no respondió/i);
+  assert.match(error.technical, /Página final: https:\/\/www\.crealitycloud\.com\/es/);
 });
 
 test('distingue la ausencia de XServer de un perfil bloqueado', () => {

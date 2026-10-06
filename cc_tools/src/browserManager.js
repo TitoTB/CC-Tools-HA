@@ -3,6 +3,7 @@ import path from 'path';
 import { chromium } from 'playwright';
 import { browserSessionDir } from './storage.js';
 import { inspectCrealityPage } from './crealityDiagnostics.js';
+import { isNavigationTimeout, navigateToCrealityPage } from './crealityNavigation.js';
 
 const PROFILE_LOCK_FILES = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lock'];
 const SESSION_CHECK_URL = 'https://www.crealitycloud.com/es';
@@ -298,10 +299,17 @@ async function closeActiveContext() {
 
 async function assertAuthenticatedSession(context) {
   const page = context.pages()[0] || await context.newPage();
-  await page.goto(SESSION_CHECK_URL, {
-    waitUntil: 'domcontentloaded',
-    timeout: 30000
-  });
+  try {
+    await navigateToCrealityPage(page, SESSION_CHECK_URL, {
+      timeout: 30000,
+      attempts: 2
+    });
+  } catch (error) {
+    if (isNavigationTimeout(error) || error.code === 'NAVIGATION_TARGET_MISMATCH') {
+      throw sessionCheckUnavailableError(error, page.url());
+    }
+    throw error;
+  }
   await page.waitForTimeout(750);
   const diagnostic = await inspectCrealityPage(page, null);
   if (!diagnostic || ![
@@ -314,6 +322,22 @@ async function assertAuthenticatedSession(context) {
   error.systemic = true;
   error.diagnostic = diagnostic;
   throw error;
+}
+
+export function sessionCheckUnavailableError(error, currentUrl = '') {
+  const technical = [
+    error?.message || String(error),
+    `Página final: ${currentUrl || 'desconocida'}.`,
+    'La sesión no se ha considerado cerrada porque Creality Cloud no llegó a responder.'
+  ].join(' ');
+  const normalized = browserError(
+    'SESSION_CHECK_UNAVAILABLE',
+    'Creality Cloud no respondió al comprobar la sesión.',
+    false,
+    technical
+  );
+  normalized.silentRetry = true;
+  return normalized;
 }
 
 function watchContext(context) {

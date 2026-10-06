@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.20
+
+- Reintenta la comprobación inicial de sesión cuando Creality Cloud tarda en responder.
+- Evita registrar y notificar como descarga fallida una indisponibilidad puntual de la portada.
+- Conserva el turno planificado y lo desplaza diez minutos cuando la comprobación no puede completarse.
+
 ## 1.0.19
 
 - Trata los timeouts recuperables del planificador como reintentos aplazados y conserva su diagnóstico en Logs.

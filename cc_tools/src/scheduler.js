@@ -182,7 +182,12 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
     }
 
     if (source === 'schedule'
-      && ['INCENTIVE_PAGE_NOT_READY', 'BROWSER_CRASHED', 'FINISH_PRINT_AUTH_REQUEST_NOT_OBSERVED'].includes(error.code)
+      && [
+        'INCENTIVE_PAGE_NOT_READY',
+        'BROWSER_CRASHED',
+        'FINISH_PRINT_AUTH_REQUEST_NOT_OBSERVED',
+        'SESSION_CHECK_UNAVAILABLE'
+      ].includes(error.code)
       && error.silentRetry) {
       const freshConfig = await readConfig();
       const retryAt = new Date(Date.now() + SILENT_RETRY_MINUTES * 60 * 1000);
