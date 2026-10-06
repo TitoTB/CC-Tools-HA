@@ -148,6 +148,9 @@ export function normalizeBrowserError(error) {
     normalized.silentRetry = true;
     return normalized;
   }
+  if (/page\.goto: Timeout \d+ms exceeded|Navigation timeout/i.test(text)) {
+    return crealityServiceUnavailableError(error);
+  }
   if (error?.code) return error;
   if (isDisplayError(error)) {
     return browserError(
@@ -174,6 +177,17 @@ export function normalizeBrowserError(error) {
     );
   }
   return error;
+}
+
+function crealityServiceUnavailableError(error) {
+  const normalized = browserError(
+    'CREALITY_SERVICE_UNAVAILABLE',
+    'Creality Cloud no respondió dentro del tiempo esperado.',
+    false,
+    error?.message || String(error)
+  );
+  normalized.silentRetry = true;
+  return normalized;
 }
 
 async function launchWithRecovery(options, behavior = {}) {

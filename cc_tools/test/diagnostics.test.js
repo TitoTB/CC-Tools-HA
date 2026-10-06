@@ -49,6 +49,20 @@ test('una comprobación de sesión sin respuesta se reintenta sin asumir que se 
   assert.match(error.technical, /Página final: https:\/\/www\.crealitycloud\.com\/es/);
 });
 
+test('un timeout de navegación se clasifica como indisponibilidad temporal', () => {
+  const error = normalizeBrowserError(new Error(
+    'page.goto: Timeout 30000ms exceeded. navigating to "https://www.crealitycloud.com/es/model-category/3d-print-all"'
+  ));
+
+  assert.equal(error.code, 'CREALITY_SERVICE_UNAVAILABLE');
+  assert.equal(error.silentRetry, true);
+});
+
+test('un timeout de un control no se confunde con una caída del servicio', () => {
+  const original = new Error('locator.click: Timeout 30000ms exceeded.');
+  assert.equal(normalizeBrowserError(original), original);
+});
+
 test('distingue la ausencia de XServer de un perfil bloqueado', () => {
   const error = normalizeBrowserError(new Error('Missing X server or $DISPLAY'));
   assert.equal(error.code, 'DISPLAY_UNAVAILABLE');
@@ -210,6 +224,24 @@ test('un modelo eliminado con HTTP 404 no se considera una incidencia general', 
   assert.equal(result.code, 'MODEL_NOT_FOUND');
   assert.equal(result.category, 'model');
   assert.equal(result.systemic, false);
+});
+
+test('un HTTP 504 conserva el estado y se marca como transitorio', async () => {
+  const url = 'https://www.crealitycloud.com/es/incentive-points?thirdType=earn-points';
+  const page = fakePage({ url, title: 'Creality Cloud', body: 'Gateway timeout al cargar la página solicitada.' });
+  const observer = {
+    snapshot: async () => [{
+      status: 504,
+      url,
+      resourceType: 'document',
+      headers: {}
+    }]
+  };
+
+  const result = await inspectCrealityPage(page, observer, { requireBody: true });
+  assert.equal(result.code, 'CREALITY_HTTP_ERROR');
+  assert.equal(result.httpStatus, 504);
+  assert.equal(result.transient, true);
 });
 
 function fakePage({ url, title, body }) {

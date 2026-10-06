@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.21
+
+- Trata los timeouts de navegación y los estados HTTP 502, 503 y 504 como indisponibilidades temporales de Creality Cloud.
+- Conserva los turnos pendientes y aplica reintentos progresivos sin generar alertas por cada tarea.
+- Envía un único aviso al confirmar la incidencia y otro cuando las automatizaciones se recuperan.
+
 ## 1.0.20
 
 - Reintenta la comprobación inicial de sesión cuando Creality Cloud tarda en responder.

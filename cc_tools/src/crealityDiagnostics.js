@@ -124,7 +124,14 @@ export async function inspectCrealityPage(page, observer, options = {}) {
         'El modelo ya no está disponible en Creality Cloud.', { url, title, responses, frameUrls });
     }
     return diagnostic('CREALITY_HTTP_ERROR', 'network', true,
-      `Creality Cloud respondió con el estado HTTP ${documentError.status}.`, { url, title, responses, frameUrls });
+      `Creality Cloud respondió con el estado HTTP ${documentError.status}.`, {
+        url,
+        title,
+        responses,
+        frameUrls,
+        httpStatus: documentError.status,
+        transient: [502, 503, 504].includes(documentError.status)
+      });
   }
 
   if (options.requireBody && bodyText.length < 40) {

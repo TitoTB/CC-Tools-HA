@@ -45,7 +45,10 @@ const DEFAULT_CONFIG = {
     lastRecoveredAt: '',
     rewardCooldownDate: '',
     rewardCooldownCount: 0,
-    pauseSource: ''
+    pauseSource: '',
+    serviceFailureCount: 0,
+    serviceFailureAt: '',
+    serviceUnavailableNotified: false
   },
   points: {
     total: null,

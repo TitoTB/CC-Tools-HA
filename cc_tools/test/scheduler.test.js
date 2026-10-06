@@ -8,6 +8,8 @@ import {
   delayPendingTaskPlan,
   executeWithTimeout,
   isGlobalBlockingIncident,
+  recordCrealityServiceFailure,
+  transientCrealityServiceFailure,
   updateAutomationHealth,
   updateModelBoostState,
   updateNextRunAfterExecution,
@@ -75,7 +77,79 @@ test('solo las incidencias globales confirmadas pueden detener el scheduler', ()
   assert.equal(isGlobalBlockingIncident({ code: 'RATE_LIMIT_CONFIRMED' }), true);
   assert.equal(isGlobalBlockingIncident({ code: 'SECURITY_CHALLENGE' }), true);
   assert.equal(isGlobalBlockingIncident({ code: 'LOGIN_REQUIRED' }), true);
+  assert.equal(isGlobalBlockingIncident({ code: 'CREALITY_SERVICE_UNAVAILABLE' }), true);
   assert.equal(isGlobalBlockingIncident({ reasonCode: 'SECURITY_CHALLENGE' }), true);
+});
+
+test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilidad temporal', () => {
+  assert.equal(transientCrealityServiceFailure({
+    message: 'page.goto: Timeout 30000ms exceeded.'
+  })?.code, 'CREALITY_SERVICE_UNAVAILABLE');
+  assert.equal(transientCrealityServiceFailure({
+    code: 'CREALITY_HTTP_ERROR',
+    diagnostic: { httpStatus: 504 },
+    message: 'Creality Cloud respondió con el estado HTTP 504.'
+  })?.httpStatus, 504);
+  assert.equal(transientCrealityServiceFailure({
+    code: 'CREALITY_HTTP_ERROR',
+    diagnostic: { httpStatus: 500 },
+    message: 'Creality Cloud respondió con el estado HTTP 500.'
+  }), null);
+});
+
+test('confirma la caída al segundo fallo y aumenta progresivamente la espera', () => {
+  const config = { automationHealth: { state: 'active' } };
+  const failure = {
+    code: 'CREALITY_SERVICE_UNAVAILABLE',
+    message: 'Creality Cloud no está disponible temporalmente.'
+  };
+  const first = recordCrealityServiceFailure(
+    config,
+    'modelDownloads',
+    failure,
+    new Date('2026-10-06T16:40:00.000Z')
+  );
+  assert.equal(first.retryMinutes, 10);
+  assert.equal(first.confirmed, false);
+  assert.equal(first.notificationRequired, false);
+  assert.equal(config.automationHealth.state, 'active');
+
+  const second = recordCrealityServiceFailure(
+    config,
+    'finishPrint',
+    failure,
+    new Date('2026-10-06T16:52:00.000Z')
+  );
+  assert.equal(second.retryMinutes, 20);
+  assert.equal(second.confirmed, true);
+  assert.equal(second.notificationRequired, true);
+  assert.equal(config.automationHealth.state, 'paused');
+
+  const third = recordCrealityServiceFailure(
+    config,
+    'modelDownloads',
+    failure,
+    new Date('2026-10-06T17:02:00.000Z')
+  );
+  assert.equal(third.retryMinutes, 40);
+  assert.equal(third.notificationRequired, false);
+});
+
+test('una ejecución correcta limpia la caída y solicita un único aviso de recuperación', () => {
+  const config = {
+    automationHealth: {
+      state: 'paused',
+      reasonCode: 'CREALITY_SERVICE_UNAVAILABLE',
+      serviceFailureCount: 3,
+      serviceUnavailableNotified: true
+    }
+  };
+
+  const event = updateAutomationHealth(config, 'modelDownloads', 'success', { details: {} });
+  assert.equal(event.recovered, true);
+  assert.equal(config.automationHealth.state, 'active');
+  assert.equal(config.automationHealth.serviceFailureCount, 0);
+  assert.equal(config.automationHealth.serviceUnavailableNotified, false);
 });
 
 test('interpreta Retry-After expresado como fecha HTTP', () => {
