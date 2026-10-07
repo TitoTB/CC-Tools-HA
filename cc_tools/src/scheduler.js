@@ -4,7 +4,7 @@ import { runModelDownloads } from './modelDownloadTask.js';
 import { actionInfo, runModelAction } from './modelActionTask.js';
 import { sendTelegram } from './telegram.js';
 import { generateDownloadPlan, isDue, scheduleNextRun, scheduleNextRunInCurrentWindow } from './timeWindow.js';
-import { diagnoseTaskError } from './crealityDiagnostics.js';
+import { diagnoseTaskError, normalizeCaughtError } from './crealityDiagnostics.js';
 import { mergePointsState, pointsSummaryFromResult } from './pointsCounter.js';
 import { applyStartedVirtualPrint, manualVirtualPrintConfig, startVirtualPrint } from './finishPrintTask.js';
 import { isFinishPrintStartRun } from './finishPrintSelection.js';
@@ -149,6 +149,12 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
 
     return { status, message };
   } catch (error) {
+    error = normalizeCaughtError(error, {
+      code: 'EMPTY_TASK_ERROR',
+      category: 'technical',
+      message: 'La tarea terminó sin devolver información sobre el error.',
+      phase: `${taskId}:${source}`
+    });
     if (cancellationRequest?.taskId === taskId) {
       const cancelledAt = new Date().toISOString();
       const message = cancellationRequest.reason === 'login'
@@ -647,6 +653,12 @@ export function boostAvailabilityRefreshDue(taskConfig = {}, now = new Date()) {
 }
 
 async function appendExecutionError(taskId, source, startedAt, error, options = {}) {
+  error = normalizeCaughtError(error, {
+    code: 'EMPTY_TASK_ERROR',
+    category: 'technical',
+    message: 'La tarea terminó sin devolver información sobre el error.',
+    phase: `${taskId}:${source}`
+  });
   const message = error.message || String(error);
   const runMessage = options.message || (taskId === 'creality' ? 'Check-in fallido' : message);
   const diagnostic = await diagnoseTaskError(error, null, null, {
@@ -1267,17 +1279,27 @@ export function isGlobalBlockingIncident(incident = {}) {
 }
 
 export function transientCrealityServiceFailure(error = {}) {
-  const code = String(error.code || '');
-  const diagnostic = error.diagnostic || error;
-  const message = error.technical || error.message || diagnostic.message || String(error);
+  const normalized = normalizeCaughtError(error, {
+    code: 'EMPTY_TASK_ERROR',
+    message: 'La tarea terminó sin devolver información sobre el error.',
+    phase: 'clasificación de disponibilidad'
+  });
+  const diagnostic = normalized.diagnostic || normalized;
+  const code = String(normalized.code || diagnostic.code || '');
+  const message = normalized.technical || normalized.message || diagnostic.message || String(normalized);
   const httpStatus = Number(
-    error.httpStatus
+    normalized.httpStatus
     || diagnostic.httpStatus
     || String(message).match(/HTTP\s+(502|503|504)/i)?.[1]
   );
   const navigationTimeout = /page\.goto: Timeout \d+ms exceeded|Navigation timeout/i.test(message);
   const unavailable = code === 'SESSION_CHECK_UNAVAILABLE'
     || code === 'CREALITY_SERVICE_UNAVAILABLE'
+    || code === 'EMPTY_BROWSER_ERROR'
+    || code === 'EMPTY_TASK_ERROR'
+    || code === 'EMPTY_DOWNLOAD_ERROR'
+    || code === 'EMPTY_DOWNLOAD_ACTION_ERROR'
+    || (code === 'PAGE_INCOMPLETE' && diagnostic.systemic === true)
     || navigationTimeout
     || (code === 'CREALITY_HTTP_ERROR' && [502, 503, 504].includes(httpStatus));
   if (!unavailable) return null;

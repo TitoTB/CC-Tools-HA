@@ -150,7 +150,7 @@ function hasStandaloneSecurityText(title, bodyText) {
 
 export async function diagnoseTaskError(error, page, observer, fallback = {}) {
   if (error?.diagnostic) return error.diagnostic;
-  const text = error?.technical || error?.message || String(error);
+  const text = errorTechnicalText(error);
   if (error?.code === 'DISPLAY_UNAVAILABLE' || /without having an? XServer|Missing X server|Missing X server or \$DISPLAY/i.test(text)) {
     return diagnostic('DISPLAY_UNAVAILABLE', 'browser', false,
       'La pantalla virtual del navegador no estaba disponible.', { technical: text });
@@ -188,6 +188,26 @@ export async function diagnoseTaskError(error, page, observer, fallback = {}) {
       technical: compactTechnical(text)
     }
   );
+}
+
+export function normalizeCaughtError(value, fallback = {}) {
+  if (value instanceof Error) return value;
+
+  const raw = printableThrownValue(value);
+  const error = new Error(
+    fallback.message || 'La operación devolvió un error vacío o con un formato no válido.'
+  );
+  if (value && typeof value === 'object') Object.assign(error, value);
+  error.code = error.code || fallback.code || 'EMPTY_TASK_ERROR';
+  error.category = error.category || fallback.category || 'technical';
+  error.systemic = Boolean(error.systemic || fallback.systemic);
+  error.silentRetry = fallback.silentRetry !== false;
+  error.technical = [
+    fallback.phase ? `Fase: ${fallback.phase}.` : '',
+    `Valor lanzado: ${raw}.`,
+    fallback.technical || ''
+  ].filter(Boolean).join(' ');
+  return error;
 }
 
 export async function captureDiagnosticScreenshot(page, taskId, code) {
@@ -370,6 +390,25 @@ function diagnostic(code, category, systemic, message, details = {}) {
 
 function compactTechnical(value) {
   return String(value || '').replace(/\s*=+\s*logs\s*=+[\s\S]*/i, '').replace(/\s+/g, ' ').trim().slice(0, 1000);
+}
+
+function errorTechnicalText(error) {
+  const message = error?.technical || error?.message || String(error);
+  const stack = error?.stack && !String(error.stack).includes(String(message))
+    ? error.stack
+    : error?.stack || '';
+  return [message, stack].filter(Boolean).join('\n');
+}
+
+function printableThrownValue(value) {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'string') return value.slice(0, 500);
+  try {
+    return JSON.stringify(value).slice(0, 500);
+  } catch {
+    return String(value).slice(0, 500);
+  }
 }
 
 function normalize(value) {

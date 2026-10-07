@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.22
+
+- Evita que respuestas vacías oculten el error real de una descarga con `Cannot read properties of null`.
+- Conserva y reprograma las descargas cuando Creality Cloud devuelve una página incompleta.
+- Amplía los datos técnicos con la fase y la pila necesarias para diagnosticar futuros cambios de la web.
+
 ## 1.0.21
 
 - Trata los timeouts de navegación y los estados HTTP 502, 503 y 504 como indisponibilidades temporales de Creality Cloud.

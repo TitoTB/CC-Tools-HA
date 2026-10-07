@@ -95,6 +95,21 @@ test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilida
     diagnostic: { httpStatus: 500 },
     message: 'Creality Cloud respondió con el estado HTTP 500.'
   }), null);
+  assert.equal(transientCrealityServiceFailure({
+    code: 'PAGE_INCOMPLETE',
+    systemic: true,
+    message: 'La página no terminó de cargar.'
+  })?.code, 'CREALITY_SERVICE_UNAVAILABLE');
+  assert.equal(transientCrealityServiceFailure({
+    code: 'PAGE_INCOMPLETE',
+    systemic: false,
+    message: 'Una ficha concreta no terminó de cargar.'
+  }), null);
+  assert.equal(transientCrealityServiceFailure(null)?.code, 'CREALITY_SERVICE_UNAVAILABLE');
+  assert.equal(transientCrealityServiceFailure({
+    code: 'EMPTY_DOWNLOAD_ERROR',
+    message: 'La descarga no devolvió información sobre el error.'
+  })?.code, 'CREALITY_SERVICE_UNAVAILABLE');
 });
 
 test('confirma la caída al segundo fallo y aumenta progresivamente la espera', () => {

@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
 import { browserSessionDir } from './storage.js';
-import { inspectCrealityPage } from './crealityDiagnostics.js';
+import { inspectCrealityPage, normalizeCaughtError } from './crealityDiagnostics.js';
 import { isNavigationTimeout, navigateToCrealityPage } from './crealityNavigation.js';
 
 const PROFILE_LOCK_FILES = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lock'];
@@ -137,6 +137,12 @@ export async function abortAutomationBrowser() {
 }
 
 export function normalizeBrowserError(error) {
+  error = normalizeCaughtError(error, {
+    code: 'EMPTY_BROWSER_ERROR',
+    category: 'technical',
+    message: 'El navegador no devolvió información sobre el error.',
+    phase: 'automatización del navegador'
+  });
   const text = error?.message || String(error);
   if (/\bPage crashed\b|Target crashed|page\.waitForTimeout: Page crashed/i.test(text)) {
     const normalized = browserError(
@@ -319,7 +325,7 @@ async function assertAuthenticatedSession(context) {
       attempts: 2
     });
   } catch (error) {
-    if (isNavigationTimeout(error) || error.code === 'NAVIGATION_TARGET_MISMATCH') {
+    if (isNavigationTimeout(error) || error?.code === 'NAVIGATION_TARGET_MISMATCH') {
       throw sessionCheckUnavailableError(error, page.url());
     }
     throw error;

@@ -24,6 +24,7 @@ import {
   generalizedIncident,
   inspectCrealityPage,
   observeCrealityPage,
+  normalizeCaughtError,
   saveDiagnosticImage
 } from './crealityDiagnostics.js';
 import {
@@ -267,6 +268,12 @@ export async function runModelDownloads(taskConfig = {}, options = {}) {
             if (!created) continue;
             downloaded.push(record);
           } catch (error) {
+            error = normalizeCaughtError(error, {
+              code: 'EMPTY_DOWNLOAD_ERROR',
+              category: 'download',
+              message: 'La descarga terminó sin devolver información sobre el error.',
+              phase: `descarga del modelo ${candidate.url || 'desconocido'}`
+            });
             if (error.verificationPage && error.verificationPage !== page) {
               observer.stop();
               page = error.verificationPage;
@@ -808,6 +815,12 @@ async function saveDownload(page, candidate, batchDir, title, button, options = 
       diagnosticImages: [{ image: beforeImage, code: 'before-action' }, { image: afterImage, code: 'after-action' }]
     };
   } catch (error) {
+    error = normalizeCaughtError(error, {
+      code: 'EMPTY_DOWNLOAD_ACTION_ERROR',
+      category: 'download',
+      message: 'La acción de descarga terminó sin devolver información sobre el error.',
+      phase: 'acción de descarga del modelo'
+    });
     const actionTrace = await options.observer.captureSince(actionMark);
     const after = await inspectControlState(button);
     const image = await captureDiagnosticImage(page);

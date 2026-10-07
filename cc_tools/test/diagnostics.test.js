@@ -5,8 +5,26 @@ import {
   generalizedIncident,
   inspectCrealityPage,
   isModelReviewFailureResponse,
-  isSecurityChallengeResponse
+  isSecurityChallengeResponse,
+  normalizeCaughtError
 } from '../src/crealityDiagnostics.js';
+
+test('normaliza una excepción nula sin ocultar la fase que falló', () => {
+  const error = normalizeCaughtError(null, {
+    code: 'EMPTY_DOWNLOAD_ERROR',
+    phase: 'descarga del modelo'
+  });
+  assert.equal(error.code, 'EMPTY_DOWNLOAD_ERROR');
+  assert.match(error.technical, /Fase: descarga del modelo/);
+  assert.match(error.technical, /Valor lanzado: null/);
+});
+
+test('el navegador convierte una excepción nula en un error diagnosticable', () => {
+  const error = normalizeBrowserError(null);
+  assert.equal(error.code, 'EMPTY_BROWSER_ERROR');
+  assert.equal(error.silentRetry, true);
+  assert.match(error.technical, /Valor lanzado: null/);
+});
 
 test('normaliza un perfil de Chromium bloqueado como incidencia sistémica', () => {
   const error = normalizeBrowserError(new Error('Failed to create a ProcessSingleton for your profile directory.'));
