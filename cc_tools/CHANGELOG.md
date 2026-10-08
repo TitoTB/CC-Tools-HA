@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.23
+
+- Impide que la consulta auxiliar de boosts deje bloqueado el planificador indefinidamente.
+- Aplica watchdog a las consultas de boosts, pedidos y canjes.
+- Detecta y libera automáticamente ejecuciones antiguas cuyo tiempo máximo ya ha vencido.
+
 ## 1.0.22
 
 - Evita que respuestas vacías oculten el error real de una descarga con `Cannot read properties of null`.

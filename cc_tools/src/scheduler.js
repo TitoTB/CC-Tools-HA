@@ -47,6 +47,8 @@ let runningStartedAt = '';
 let runningTimeoutAt = '';
 let cancellationRequest = null;
 let timer = null;
+let activeRunToken = 0;
+let runTokenSequence = 0;
 
 export function startScheduler() {
   if (timer) clearInterval(timer);
@@ -58,6 +60,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
   if (!TASK_IDS.includes(taskId)) {
     throw new Error(`Tarea desconocida: ${taskId}`);
   }
+  await recoverExpiredSchedulerRun();
   const startedAt = new Date().toISOString();
   if (running) {
     const error = new Error(`Ya hay una ejecución en curso${runningTask ? ` (${taskDisplayName(runningTask)})` : ''}. Inténtalo de nuevo cuando termine.`);
@@ -65,12 +68,8 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
     throw error;
   }
 
-  running = true;
-  runningTask = taskId;
-  runningSource = source;
-  runningStartedAt = startedAt;
   const timeoutMs = taskExecutionTimeoutMs();
-  runningTimeoutAt = new Date(Date.now() + timeoutMs).toISOString();
+  const runToken = beginSchedulerRun(taskId, source, timeoutMs, new Date(startedAt));
   cancellationRequest = null;
   console.log(`[scheduler] Inicio: ${taskDisplayName(taskId)} · ${source} · límite ${Math.round(timeoutMs / 1000)} s`);
 
@@ -269,12 +268,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
   } finally {
     const elapsedSeconds = Math.max(0, Math.round((Date.now() - Date.parse(startedAt)) / 1000));
     console.log(`[scheduler] Fin: ${taskDisplayName(taskId)} · ${source} · ${elapsedSeconds} s`);
-    running = false;
-    runningTask = '';
-    runningSource = '';
-    runningStartedAt = '';
-    runningTimeoutAt = '';
-    cancellationRequest = null;
+    releaseSchedulerRun(runToken);
   }
 }
 
@@ -311,7 +305,8 @@ export function schedulerState() {
     runningTask,
     runningSource,
     startedAt: runningStartedAt,
-    timeoutAt: runningTimeoutAt
+    timeoutAt: runningTimeoutAt,
+    stale: isSchedulerRunExpired({ running, startedAt: runningStartedAt, timeoutAt: runningTimeoutAt })
   };
 }
 
@@ -361,6 +356,7 @@ function taskExecutionTimeoutMs() {
 }
 
 async function tick() {
+  await recoverExpiredSchedulerRun();
   if (running) return;
 
   const config = await readConfig();
@@ -421,10 +417,15 @@ async function tick() {
 async function refreshScheduledShopOrders(config, now = new Date()) {
   if (config.setup?.assistantCompleted !== true) return false;
   if (!shopOrdersRefreshDue(config.shopOrders, now)) return false;
-  running = true;
-  runningTask = 'shopOrders';
+  const timeoutMs = taskExecutionTimeoutMs();
+  const runToken = beginSchedulerRun('shopOrders', 'schedule-maintenance', timeoutMs, now);
   try {
-    const orders = await readShopOrders();
+    const orders = await executeWithTimeout(readShopOrders(), {
+      timeoutMs,
+      taskId: 'shopOrders',
+      source: 'schedule-maintenance',
+      onTimeout: abortAutomationBrowser
+    });
     const previousOrders = config.shopOrders;
     config.shopOrders = mergeShopOrdersState(previousOrders, orders, now);
     const shippedOrders = shippedShopOrderTransitions(previousOrders, config.shopOrders);
@@ -451,8 +452,7 @@ async function refreshScheduledShopOrders(config, now = new Date()) {
     console.error('[shop-orders]', error.message);
     return true;
   } finally {
-    running = false;
-    runningTask = '';
+    releaseSchedulerRun(runToken);
   }
 }
 
@@ -463,12 +463,17 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
   const lastAttempt = Date.parse(goal.lastAttemptAt || '');
   if (Number.isFinite(lastAttempt) && now.getTime() - lastAttempt < 30 * 60 * 1000) return false;
 
-  running = true;
-  runningTask = 'shopRedemption';
   const startedAt = now.toISOString();
+  const timeoutMs = taskExecutionTimeoutMs();
+  const runToken = beginSchedulerRun('shopRedemption', 'schedule-maintenance', timeoutMs, now);
   try {
     goal.lastAttemptAt = startedAt;
-    const result = await redeemShopGoal(goal);
+    const result = await executeWithTimeout(redeemShopGoal(goal), {
+      timeoutMs,
+      taskId: 'shopRedemption',
+      source: 'schedule-maintenance',
+      onTimeout: abortAutomationBrowser
+    });
     goal.lastCheckedAt = new Date().toISOString();
     if (result.product) {
       goal.name = result.product.name;
@@ -542,8 +547,7 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
     }
     return true;
   } finally {
-    running = false;
-    runningTask = '';
+    releaseSchedulerRun(runToken);
   }
 }
 
@@ -622,13 +626,21 @@ async function refreshDailyBoostAvailability(config, now = new Date()) {
   if (!boostAvailabilityRefreshDue(task, now)) return;
   const today = dayKey(task.timezone, now);
 
-  running = true;
-  runningTask = 'modelBoosts';
+  const timeoutMs = taskExecutionTimeoutMs();
+  const runToken = beginSchedulerRun('modelBoosts', 'availability-refresh', timeoutMs, now);
   try {
-    const availability = await checkModelBoostAvailability({
-      ...task,
-      ownUserId: config.crealityProfile?.userId || ''
-    });
+    const availability = await executeWithTimeout(
+      checkModelBoostAvailability({
+        ...task,
+        ownUserId: config.crealityProfile?.userId || ''
+      }),
+      {
+        timeoutMs,
+        taskId: 'modelBoosts',
+        source: 'availability-refresh',
+        onTimeout: abortAutomationBrowser
+      }
+    );
     task.availableBoosts = Math.max(0, Number(availability.ticketsAvailable) || 0);
     task.availabilityCheckedAt = availability.checkedAt;
     task.availabilityDate = today;
@@ -637,11 +649,67 @@ async function refreshDailyBoostAvailability(config, now = new Date()) {
   } catch (error) {
     task.availabilityRetryAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
     await writeConfig(config);
-    console.error('[scheduler] No se pudo actualizar la disponibilidad de boosts:', error.message);
+    console.error('[scheduler] No se pudo actualizar la disponibilidad de boosts:', error?.message || String(error));
   } finally {
-    running = false;
-    runningTask = '';
+    releaseSchedulerRun(runToken);
   }
+}
+
+function beginSchedulerRun(taskId, source, timeoutMs, now = new Date()) {
+  const token = ++runTokenSequence;
+  activeRunToken = token;
+  running = true;
+  runningTask = taskId;
+  runningSource = source;
+  runningStartedAt = now.toISOString();
+  runningTimeoutAt = new Date(now.getTime() + timeoutMs).toISOString();
+  return token;
+}
+
+function releaseSchedulerRun(token) {
+  if (token !== activeRunToken) return false;
+  activeRunToken = 0;
+  running = false;
+  runningTask = '';
+  runningSource = '';
+  runningStartedAt = '';
+  runningTimeoutAt = '';
+  cancellationRequest = null;
+  return true;
+}
+
+export function isSchedulerRunExpired(state = {}, now = new Date()) {
+  if (!state.running) return false;
+  const timeoutAt = Date.parse(state.timeoutAt || '');
+  if (Number.isFinite(timeoutAt)) return now.getTime() >= timeoutAt;
+  const startedAt = Date.parse(state.startedAt || '');
+  return Number.isFinite(startedAt)
+    && now.getTime() - startedAt >= taskExecutionTimeoutMs();
+}
+
+async function recoverExpiredSchedulerRun(now = new Date()) {
+  if (!isSchedulerRunExpired({
+    running,
+    startedAt: runningStartedAt,
+    timeoutAt: runningTimeoutAt
+  }, now)) return false;
+
+  const staleToken = activeRunToken;
+  const staleTask = runningTask;
+  const elapsedSeconds = Number.isFinite(Date.parse(runningStartedAt))
+    ? Math.max(0, Math.round((now.getTime() - Date.parse(runningStartedAt)) / 1000))
+    : 0;
+  console.warn(`[scheduler] Liberando ejecución bloqueada: ${taskDisplayName(staleTask)} · ${elapsedSeconds} s`);
+  await abortAutomationBrowser().catch((error) => {
+    console.error('[scheduler] No se pudo cerrar Chromium al liberar la ejecución bloqueada:', error?.message || String(error));
+  });
+
+  const deadline = Date.now() + 2000;
+  while (activeRunToken === staleToken && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (activeRunToken === staleToken) releaseSchedulerRun(staleToken);
+  return true;
 }
 
 export function boostAvailabilityRefreshDue(taskConfig = {}, now = new Date()) {

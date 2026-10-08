@@ -7,6 +7,7 @@ import {
   consumeManualDownloadSuccesses,
   delayPendingTaskPlan,
   executeWithTimeout,
+  isSchedulerRunExpired,
   isGlobalBlockingIncident,
   recordCrealityServiceFailure,
   transientCrealityServiceFailure,
@@ -15,6 +16,21 @@ import {
   updateNextRunAfterExecution,
   parseRetryAfterMilliseconds
 } from '../src/scheduler.js';
+
+test('detecta y permite liberar una ejecución cuyo watchdog ya venció', () => {
+  const now = new Date('2026-10-08T10:00:00.000Z');
+  assert.equal(isSchedulerRunExpired({
+    running: true,
+    startedAt: '2026-10-08T09:40:00.000Z',
+    timeoutAt: '2026-10-08T09:48:00.000Z'
+  }, now), true);
+  assert.equal(isSchedulerRunExpired({
+    running: true,
+    startedAt: '2026-10-08T09:58:00.000Z',
+    timeoutAt: '2026-10-08T10:06:00.000Z'
+  }, now), false);
+  assert.equal(isSchedulerRunExpired({ running: false }, now), false);
+});
 
 test('el watchdog libera recursos y devuelve un diagnóstico de timeout', async () => {
   let aborted = false;
