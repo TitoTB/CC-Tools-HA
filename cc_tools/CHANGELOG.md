@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.25
+
+- Evita que una tarea correcta sin incidencia se interprete como un error vacío.
+- Impide las pausas falsas de 60 minutos por una supuesta caída de Creality Cloud.
+- Mantiene la detección de errores vacíos reales cuando se reciben de forma explícita.
+
 ## 1.0.24
 
 - Registra en Logs el motivo técnico de cada pausa temporal por indisponibilidad de Creality Cloud.

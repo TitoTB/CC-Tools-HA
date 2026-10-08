@@ -1406,7 +1406,11 @@ export function isGlobalBlockingIncident(incident = {}) {
   ]).has(code);
 }
 
-export function transientCrealityServiceFailure(error = {}) {
+export function transientCrealityServiceFailure(error) {
+  if (error === null || error === undefined) return null;
+  if (typeof error === 'object'
+    && !(error instanceof Error)
+    && Object.keys(error).length === 0) return null;
   const normalized = normalizeCaughtError(error, {
     code: 'EMPTY_TASK_ERROR',
     message: 'La tarea terminó sin devolver información sobre el error.',

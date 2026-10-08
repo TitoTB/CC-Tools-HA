@@ -144,7 +144,13 @@ test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilida
     systemic: false,
     message: 'Una ficha concreta no terminó de cargar.'
   }), null);
-  assert.equal(transientCrealityServiceFailure(null)?.code, 'CREALITY_SERVICE_UNAVAILABLE');
+  assert.equal(transientCrealityServiceFailure(null), null);
+  assert.equal(transientCrealityServiceFailure(undefined), null);
+  assert.equal(transientCrealityServiceFailure({}), null);
+  assert.equal(transientCrealityServiceFailure({
+    code: 'EMPTY_TASK_ERROR',
+    message: 'La tarea terminó sin devolver información sobre el error.'
+  })?.code, 'CREALITY_SERVICE_UNAVAILABLE');
   assert.equal(transientCrealityServiceFailure({
     code: 'EMPTY_DOWNLOAD_ERROR',
     message: 'La descarga no devolvió información sobre el error.'
