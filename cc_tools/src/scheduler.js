@@ -98,7 +98,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
     );
     const serviceFailure = transientCrealityServiceFailure(result.details?.incident);
     if (source === 'schedule' && serviceFailure) {
-      return deferScheduledServiceFailure(taskId, serviceFailure);
+      return deferScheduledServiceFailure(taskId, serviceFailure, startedAt);
     }
     const status = result.skipped ? 'skipped' : result.success ? 'success' : 'failed';
     const message = formatRunMessage(taskId, status, result);
@@ -192,7 +192,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
 
     const serviceFailure = transientCrealityServiceFailure(error);
     if (source === 'schedule' && serviceFailure) {
-      return deferScheduledServiceFailure(taskId, serviceFailure);
+      return deferScheduledServiceFailure(taskId, serviceFailure, startedAt);
     }
 
     if (source === 'schedule'
@@ -272,7 +272,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
   }
 }
 
-async function deferScheduledServiceFailure(taskId, failure) {
+async function deferScheduledServiceFailure(taskId, failure, startedAt = new Date().toISOString()) {
   const freshConfig = await readConfig();
   const event = recordCrealityServiceFailure(freshConfig, taskId, failure, new Date());
   delayPendingTaskPlan(freshConfig.tasks[taskId], taskId, event.retryAt);
@@ -281,6 +281,21 @@ async function deferScheduledServiceFailure(taskId, failure) {
     activateNextFinishPrintProfile(freshConfig.tasks.finishPrint);
   }
   await writeConfig(freshConfig);
+
+  const finishedAt = new Date().toISOString();
+  const details = serviceFailureLogDetails(taskId, failure, event);
+  await appendRun({
+    taskId,
+    source: 'schedule',
+    status: 'skipped',
+    message: `${failure.message} Reintento automático en ${event.retryMinutes} minutos.`,
+    startedAt,
+    finishedAt,
+    screenshots: [],
+    details
+  }).catch((error) => {
+    console.error('[scheduler] No se pudo registrar el aplazamiento:', error?.message || String(error));
+  });
 
   console.warn(
     `[scheduler] Creality Cloud no disponible · ${taskDisplayName(taskId)} · `
@@ -296,6 +311,50 @@ async function deferScheduledServiceFailure(taskId, failure) {
   return {
     status: 'skipped',
     message: `${failure.message} Se reintentará automáticamente en ${event.retryMinutes} minutos.`
+  };
+}
+
+export function serviceFailureLogDetails(taskId, failure = {}, event = {}) {
+  const retryAt = event.retryAt instanceof Date ? event.retryAt.toISOString() : String(event.retryAt || '');
+  const sourceCode = String(failure.sourceCode || failure.code || 'CREALITY_SERVICE_UNAVAILABLE');
+  const technical = [
+    `Tarea: ${taskDisplayName(taskId)}.`,
+    `Código original: ${sourceCode}.`,
+    failure.url ? `Página detectada: ${failure.url}.` : '',
+    failure.httpStatus ? `Estado HTTP: ${failure.httpStatus}.` : '',
+    `Fallos consecutivos: ${Math.max(1, Number(event.failureCount) || 1)}.`,
+    `Reintento en: ${Math.max(1, Number(event.retryMinutes) || 1)} minutos.`,
+    retryAt ? `Próximo intento: ${retryAt}.` : '',
+    event.confirmed ? 'Incidencia confirmada: automatizaciones pausadas temporalmente.' : 'Incidencia pendiente de confirmación.',
+    failure.technical ? `Detalle original: ${failure.technical}` : ''
+  ].filter(Boolean).join(' ');
+  const diagnostic = {
+    code: 'CREALITY_SERVICE_UNAVAILABLE',
+    category: 'network',
+    systemic: true,
+    message: failure.message || 'Creality Cloud no está disponible temporalmente.',
+    detectedAt: failure.detectedAt || new Date().toISOString(),
+    url: failure.url || '',
+    httpStatus: failure.httpStatus || null,
+    sourceCode,
+    technical
+  };
+  return {
+    deferredServiceFailure: true,
+    retryAt,
+    retryMinutes: Math.max(1, Number(event.retryMinutes) || 1),
+    failureCount: Math.max(1, Number(event.failureCount) || 1),
+    outageConfirmed: event.confirmed === true,
+    failures: [{
+      title: 'Creality Cloud',
+      code: diagnostic.code,
+      category: diagnostic.category,
+      systemic: true,
+      error: diagnostic.message,
+      diagnostic
+    }],
+    diagnostics: [diagnostic],
+    incident: diagnostic
   };
 }
 
@@ -802,6 +861,7 @@ function countTodayDownloadAttempts(runs = [], taskConfig = {}) {
   const today = dayKey(timezone);
   return runs
     .filter((run) => run.taskId === 'modelDownloads'
+      && run.details?.deferredServiceFailure !== true
       && (run.source === 'schedule' || creditedDownloads(run).length > 0)
       && dayKey(timezone, new Date(run.finishedAt || run.createdAt)) === today)
     .length;
@@ -1379,6 +1439,8 @@ export function transientCrealityServiceFailure(error = {}) {
     message: 'Creality Cloud no está disponible temporalmente.',
     technical: String(message),
     httpStatus: Number.isFinite(httpStatus) ? httpStatus : null,
+    sourceCode: code || 'UNKNOWN_SERVICE_FAILURE',
+    url: diagnostic.url || normalized.url || '',
     detectedAt: new Date().toISOString()
   };
 }

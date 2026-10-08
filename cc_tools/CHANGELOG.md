@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.24
+
+- Registra en Logs el motivo técnico de cada pausa temporal por indisponibilidad de Creality Cloud.
+- Incluye código original, URL, HTTP, fallos consecutivos y fecha del próximo intento.
+- Evita que estos registros técnicos consuman posiciones de la planificación diaria.
+
 ## 1.0.23
 
 - Impide que la consulta auxiliar de boosts deje bloqueado el planificador indefinidamente.

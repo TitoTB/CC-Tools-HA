@@ -10,12 +10,35 @@ import {
   isSchedulerRunExpired,
   isGlobalBlockingIncident,
   recordCrealityServiceFailure,
+  serviceFailureLogDetails,
   transientCrealityServiceFailure,
   updateAutomationHealth,
   updateModelBoostState,
   updateNextRunAfterExecution,
   parseRetryAfterMilliseconds
 } from '../src/scheduler.js';
+
+test('registra el motivo técnico de una pausa sin consumir la tarea', () => {
+  const details = serviceFailureLogDetails('modelDownloads', {
+    code: 'CREALITY_SERVICE_UNAVAILABLE',
+    sourceCode: 'PAGE_INCOMPLETE',
+    message: 'Creality Cloud no está disponible temporalmente.',
+    technical: 'El body llegó vacío.',
+    url: 'https://www.crealitycloud.com/es',
+    httpStatus: 504
+  }, {
+    retryAt: new Date('2026-10-08T10:20:00.000Z'),
+    retryMinutes: 20,
+    failureCount: 2,
+    confirmed: true
+  });
+  assert.equal(details.deferredServiceFailure, true);
+  assert.equal(details.retryMinutes, 20);
+  assert.equal(details.diagnostics[0].sourceCode, 'PAGE_INCOMPLETE');
+  assert.match(details.diagnostics[0].technical, /Estado HTTP: 504/);
+  assert.match(details.diagnostics[0].technical, /Fallos consecutivos: 2/);
+  assert.match(details.diagnostics[0].technical, /automatizaciones pausadas temporalmente/);
+});
 
 test('detecta y permite liberar una ejecución cuyo watchdog ya venció', () => {
   const now = new Date('2026-10-08T10:00:00.000Z');

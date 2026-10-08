@@ -1637,6 +1637,7 @@ function todayDownloadEvents(runs, taskConfig) {
 
   for (const run of runs) {
     if (run.taskId !== 'modelDownloads') continue;
+    if (run.details?.deferredServiceFailure === true) continue;
     const finishedAt = run.finishedAt || run.createdAt;
     if (!finishedAt || dayKey(timezone, new Date(finishedAt)) !== today) continue;
     if (run.source !== 'schedule' && creditedDownloads(run).length <= 0) continue;
