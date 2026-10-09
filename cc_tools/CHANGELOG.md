@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.26
+
+- Limita los comentarios a diseños cuya descarga haya sido verificada.
+- Excluye modelos meramente indexados desde favoritos o descubiertos en el catálogo.
+- Omite la tarea sin publicar comentarios cuando no quedan descargas válidas.
+
 ## 1.0.25
 
 - Evita que una tarea correcta sin incidencia se interprete como un error vacío.

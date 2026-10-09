@@ -58,19 +58,52 @@ test('el contador diario solo suma recompensas acreditadas por tipo', () => {
 });
 
 test('un modelo que ya recibió un comentario no vuelve a ser candidato', () => {
-  const pending = { id: 'pending', url: 'https://example.com/pending', commentCompleted: false };
-  const completed = { id: 'completed', url: 'https://example.com/completed', commentCompleted: true };
-  const unavailable = { id: 'unavailable', url: 'https://example.com/unavailable', commentUnavailable: true };
+  const pending = { id: 'pending', url: 'https://example.com/pending', downloadVerified: true, commentCompleted: false };
+  const completed = { id: 'completed', url: 'https://example.com/completed', downloadVerified: true, commentCompleted: true };
+  const unavailable = { id: 'unavailable', url: 'https://example.com/unavailable', downloadVerified: true, commentUnavailable: true };
   const withoutUrl = { id: 'invalid', commentCompleted: false };
 
   assert.deepEqual(eligibleCommentDesigns([completed, pending, unavailable, withoutUrl]), [pending]);
 });
 
 test('un modelo propio no es candidato para comentarios', () => {
-  const own = { id: 'own', url: 'https://example.test/own', ownerUserId: '42' };
-  const external = { id: 'external', url: 'https://example.test/external', ownerUserId: '84' };
+  const own = { id: 'own', url: 'https://example.test/own', downloadVerified: true, ownerUserId: '42' };
+  const external = { id: 'external', url: 'https://example.test/external', downloadVerified: true, ownerUserId: '84' };
 
   assert.deepEqual(eligibleCommentDesigns([own, external], '42'), [external]);
+});
+
+test('solo comenta diseños cuya descarga está verificada', () => {
+  const downloaded = {
+    id: 'downloaded',
+    url: 'https://example.test/downloaded',
+    downloadVerified: true,
+    indexedOnly: false
+  };
+  const favoriteOnly = {
+    id: 'favorite',
+    url: 'https://example.test/favorite',
+    downloadVerified: false,
+    indexedOnly: true,
+    favoriteActive: true
+  };
+  const catalogOnly = {
+    id: 'catalog',
+    url: 'https://example.test/catalog',
+    downloadVerified: false,
+    indexedOnly: true
+  };
+  const unverified = {
+    id: 'unverified',
+    url: 'https://example.test/unverified',
+    downloadVerified: false,
+    indexedOnly: false
+  };
+
+  assert.deepEqual(
+    eligibleCommentDesigns([favoriteOnly, catalogOnly, unverified, downloaded]),
+    [downloaded]
+  );
 });
 
 test('detecta un comentario previo del usuario conectado en la respuesta de Creality', () => {
@@ -98,8 +131,8 @@ test('detecta un comentario previo del usuario conectado en la respuesta de Crea
 });
 
 test('puede omitir la prioridad de autores favoritos', () => {
-  const favorite = { id: 'favorite', url: 'https://example.test/favorite', source: 'favorite', favoriteActive: true };
-  const downloaded = { id: 'downloaded', url: 'https://example.test/downloaded', source: 'catalog' };
+  const favorite = { id: 'favorite', url: 'https://example.test/favorite', source: 'favorite', favoriteActive: true, downloadVerified: true };
+  const downloaded = { id: 'downloaded', url: 'https://example.test/downloaded', source: 'catalog', downloadVerified: true };
 
   assert.deepEqual(
     prioritizedCommentCandidates([favorite, downloaded], [favorite, downloaded], false, () => 0),

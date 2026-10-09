@@ -3,9 +3,8 @@ import path from 'path';
 import { withAutomationBrowser } from './browserManager.js';
 import { captureDiagnosticScreenshot, diagnoseTaskError, failureFromDiagnostic, inspectCrealityPage, observeCrealityPage } from './crealityDiagnostics.js';
 import { compareIncentiveProgress, readIncentiveProgress, waitForIncentiveProgress } from './incentiveTasks.js';
-import { appendDesign, commentImagesDir, markDesignCommentUnavailable, markDesignCommented, readDesigns, readRuns, updateDesignOwnership } from './storage.js';
+import { commentImagesDir, markDesignCommentUnavailable, markDesignCommented, readDesigns, readRuns, updateDesignOwnership } from './storage.js';
 import { isOwnModel, readModelOwnership } from './modelOwnership.js';
-import { collectCatalogCandidates } from './modelDownloadTask.js';
 import { selectFavoriteCandidates } from './favoriteModelIndex.js';
 
 const INCENTIVES = {
@@ -23,6 +22,7 @@ export async function runModelComment(taskConfig = {}, options = {}) {
   const counts = countTodayComments(runs, taskConfig.timezone);
   const kind = selectCommentKind(taskConfig, entries, counts, options.commentKind);
   if (!kind) return skipped('Los comentarios configurados para hoy ya están completados.');
+  if (!designs.length) return skipped('No hay diseños descargados pendientes de comentar.');
 
   const candidates = eligibleCommentsForKind(entries, kind);
   const entry = randomItem(candidates);
@@ -41,19 +41,6 @@ export async function runModelComment(taskConfig = {}, options = {}) {
       });
       if (!before.found) throw taskError('INCENTIVE_TASK_NOT_FOUND', `No se encontró la tarea diaria "${incentive.title}".`);
       if (before.completed) return skipped(`La recompensa diaria "${incentive.title}" ya estaba completada.`, { before, after: before });
-
-      if (!designs.length) {
-        const catalogCandidates = await collectCatalogCandidates(page, allDesigns, 20, observer);
-        for (const catalogCandidate of catalogCandidates) {
-          const stored = await appendDesign({
-            ...catalogCandidate,
-            source: 'catalog',
-            indexedOnly: true,
-            downloadedAt: ''
-          });
-          if (stored.record && !isOwnModel(stored.record, options.ownUserId)) designs.push(stored.record);
-        }
-      }
 
       const candidates = prioritizedCommentCandidates(
         designs,
@@ -187,9 +174,10 @@ export async function runModelComment(taskConfig = {}, options = {}) {
 
 export function eligibleCommentDesigns(designs = [], ownUserId = '') {
   return designs.filter((design) => design?.url
+    && design.downloadVerified === true
+    && design.indexedOnly !== true
     && design.commentCompleted !== true
     && design.commentUnavailable !== true
-    && !(design.indexedOnly === true && design.source === 'favorite' && design.favoriteActive !== true)
     && !isOwnModel(design, ownUserId));
 }
 
