@@ -525,14 +525,22 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
   const startedAt = now.toISOString();
   const timeoutMs = taskExecutionTimeoutMs();
   const runToken = beginSchedulerRun('shopRedemption', 'schedule-maintenance', timeoutMs, now);
+  const previousStatus = goal.lastStatus;
   try {
     goal.lastAttemptAt = startedAt;
+    // Persist the pause before opening the browser. A restart or timeout must
+    // never submit the same goal again without checking the previous order.
+    goal.enabled = false;
+    goal.lastStatus = 'submitting';
+    goal.lastMessage = 'Canje iniciado. Si se interrumpe, comprueba los pedidos antes de volver a programarlo.';
+    await writeConfig(config);
     const result = await executeWithTimeout(redeemShopGoal(goal), {
       timeoutMs,
       taskId: 'shopRedemption',
       source: 'schedule-maintenance',
       onTimeout: abortAutomationBrowser
     });
+    if (runToken !== activeRunToken) return true;
     goal.lastCheckedAt = new Date().toISOString();
     if (result.product) {
       goal.name = result.product.name;
@@ -543,22 +551,29 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
     if (Number.isFinite(result.availablePoints)) config.points.total = result.availablePoints;
 
     if (result.insufficient) {
+      goal.enabled = true;
       goal.lastStatus = 'waiting';
       goal.lastMessage = 'El saldo todavía no alcanza el precio actualizado del objetivo.';
       await writeConfig(config);
       return true;
     }
     if (result.unavailable) {
+      goal.enabled = true;
       goal.lastStatus = 'unavailable';
       goal.lastMessage = 'El objetivo no está disponible actualmente; se volverá a comprobar.';
       await writeConfig(config);
       return true;
     }
 
+    if (result.success !== true || !result.orderNumber) {
+      const error = new Error('El canje no tiene un pedido confirmado. Revisa los pedidos antes de volver a programarlo.');
+      error.code = 'SHOP_REDEEM_UNVERIFIED';
+      throw error;
+    }
     goal.enabled = false;
     goal.redeemedAt = new Date().toISOString();
     goal.lastStatus = 'success';
-    goal.lastMessage = `Objetivo canjeado: ${goal.name}.`;
+    goal.lastMessage = `Objetivo canjeado: ${goal.name}. Pedido: ${result.orderNumber}.`;
     if (Number.isFinite(result.remainingPoints)) config.points.total = result.remainingPoints;
     await writeConfig(config);
     await appendRun({
@@ -569,7 +584,7 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
       startedAt,
       finishedAt: new Date().toISOString(),
       screenshots: [],
-      details: { product: { id: goal.productId, name: goal.name, points: goal.points, imageUrl: goal.imageUrl } }
+      details: { orderNumber: result.orderNumber, product: { id: goal.productId, name: goal.name, points: goal.points, imageUrl: goal.imageUrl } }
     });
     if (config.telegram.enabled && config.telegram.notifyOnShopRedemption !== false) {
       await sendTelegram(config, `🎁 CC Tools: Objetivo canjeado\n${goal.name}\n${goal.points} puntos`).catch((error) => {
@@ -578,10 +593,17 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
     }
     return true;
   } catch (error) {
-    if (['BROWSER_BUSY', 'REMOTE_BROWSER_OPEN'].includes(error.code)) return false;
+    if (runToken !== activeRunToken) return true;
+    if (['BROWSER_BUSY', 'REMOTE_BROWSER_OPEN'].includes(error.code)) {
+      goal.enabled = true;
+      goal.lastStatus = previousStatus;
+      await writeConfig(config);
+      return false;
+    }
     goal.lastAttemptAt = startedAt;
-    goal.lastStatus = 'error';
-    goal.lastMessage = error.message || 'No se pudo canjear el objetivo.';
+    goal.enabled = false;
+    goal.lastStatus = 'paused';
+    goal.lastMessage = `${error.message || 'No se pudo canjear el objetivo.'} Canje automático pausado; revisa los pedidos y pulsa Programar para reactivarlo.`;
     await writeConfig(config);
     const diagnostic = await diagnoseTaskError(error, null, null, {
       code: error.code || 'SHOP_REDEMPTION_FAILED',
