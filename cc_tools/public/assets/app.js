@@ -2850,6 +2850,7 @@ function favoriteIndexStatus(value) {
     pending: { key: 'pending', label: 'Pendiente' },
     syncing: { key: 'syncing', label: 'Indexando' },
     ready: { key: 'ready', label: 'Actualizado' },
+    empty: { key: 'ready', label: 'Sin diseños' },
     error: { key: 'error', label: 'Error' }
   })[value] || { key: 'pending', label: 'Pendiente' };
 }
