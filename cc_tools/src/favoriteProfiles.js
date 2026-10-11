@@ -31,8 +31,11 @@ export function normalizeFavoriteProfiles(profiles = []) {
   const defaultInput = Array.isArray(profiles)
     ? profiles.find((profile) => String(profile?.userId || '') === DEFAULT_FAVORITE_PROFILE.userId)
     : null;
-  const normalizedDefault = { ...DEFAULT_FAVORITE_PROFILE };
-  if (defaultInput && ['pending', 'syncing', 'ready', 'error'].includes(defaultInput.indexStatus)) {
+  const normalizedDefault = {
+    ...DEFAULT_FAVORITE_PROFILE,
+    avatarUrl: normalizeFavoriteAvatarUrl(defaultInput?.avatarUrl) || DEFAULT_FAVORITE_PROFILE.avatarUrl
+  };
+  if (defaultInput && ['pending', 'syncing', 'ready', 'empty', 'error'].includes(defaultInput.indexStatus)) {
     const indexedModelCount = Math.max(0, Math.floor(Number(defaultInput.indexedModelCount) || 0));
     normalizedDefault.indexStatus = defaultInput.indexStatus === 'ready' && indexedModelCount === 0
       ? 'pending'
@@ -69,7 +72,7 @@ export function normalizeFavoriteProfiles(profiles = []) {
 }
 
 function normalizeIndexStatus(value) {
-  return ['pending', 'syncing', 'ready', 'error'].includes(value) ? value : 'pending';
+  return ['pending', 'syncing', 'ready', 'empty', 'error'].includes(value) ? value : 'pending';
 }
 
 function validIsoDate(value) {

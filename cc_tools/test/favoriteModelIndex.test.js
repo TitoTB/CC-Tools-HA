@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectFavoriteCandidates, shouldSyncConfiguredFavorites } from '../src/favoriteModelIndex.js';
+import { selectFavoriteCandidates, shouldSyncConfiguredFavorites, favoriteSyncPlan } from '../src/favoriteModelIndex.js';
+
+test('cero diseños no fuerza la indexación de un perfil vacío ya comprobado', () => {
+  const checked = '2026-10-10T10:00:00Z';
+  const profile = { indexStatus: 'empty', indexedModelCount: 0, indexedAt: checked, fullIndexedAt: checked };
+  for (const minutes of [0, 5, 30, 359]) {
+    assert.equal(favoriteSyncPlan(profile, Date.parse(checked) + minutes * 60000).due, false);
+  }
+  assert.equal(favoriteSyncPlan(profile, Date.parse(checked) + 6 * 3600000).due, true);
+  assert.equal(favoriteSyncPlan(profile, Date.parse(checked) + 7 * 86400000).full, true);
+});
+
+test('indexa perfiles nuevos y reintenta errores reales respetando cinco minutos', () => {
+  assert.equal(favoriteSyncPlan({ indexStatus: 'pending', indexedModelCount: 0 }).due, true);
+  const now = Date.parse('2026-10-10T10:00:00Z');
+  const profile = { indexStatus: 'error', indexedAt: new Date(now).toISOString() };
+  assert.equal(favoriteSyncPlan(profile, now + 299999).due, false);
+  assert.equal(favoriteSyncPlan(profile, now + 300000).due, true);
+});
 
 test('pospone la indexación inicial hasta completar el asistente', () => {
   assert.equal(shouldSyncConfiguredFavorites({ setup: { assistantCompleted: false } }), false);
