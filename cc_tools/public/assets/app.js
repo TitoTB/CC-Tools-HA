@@ -2777,6 +2777,8 @@ function setShopRegionMenu(open) {
 }
 
 function shopGoalStatusText(goal) {
+  if (goal.lastStatus === 'submitting') return 'Canje iniciado. Si se interrumpió, revisa los pedidos de Creality Cloud antes de volver a pulsar Programar.';
+  if (goal.lastStatus === 'paused') return goal.lastMessage || 'Canje pausado. Revisa los pedidos antes de volver a pulsar Programar.';
   if (goal.lastStatus === 'success') return `Canje completado el ${formatDate(goal.redeemedAt)}.`;
   if (goal.lastStatus === 'unavailable') return 'Objetivo no disponible temporalmente. Se volverá a comprobar.';
   if (goal.lastStatus === 'error') return `Último intento: ${goal.lastMessage || 'no se pudo completar el canje'}`;
