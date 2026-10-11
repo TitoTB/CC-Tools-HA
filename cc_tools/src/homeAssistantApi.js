@@ -1,5 +1,6 @@
 import { normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
 import { countCreditedFinishPrintRun, isFinishPrintStartRun } from './finishPrintSelection.js';
+import { createHash } from 'node:crypto';
 
 export const HOME_ASSISTANT_API_VERSION = 1;
 
@@ -32,6 +33,7 @@ export function buildHomeAssistantState({
   browser = {},
   dailyCounters = {},
   nextExecutions = {},
+  schedule = [],
   health = {}
 }) {
   const timezone = config.timezone || 'Europe/Madrid';
@@ -77,9 +79,14 @@ export function buildHomeAssistantState({
     scheduler: {
       running: scheduler.running === true,
       runningTask: publicTaskId(scheduler.runningTask),
+      runningSource: String(scheduler.runningSource || ''),
+      startedAt: String(scheduler.startedAt || ''),
+      timeoutAt: String(scheduler.timeoutAt || ''),
+      stale: scheduler.stale === true,
       browserActive: browser.active === true,
       browserMode: String(browser.mode || 'idle')
     },
+    schedule: homeAssistantSchedule(schedule),
     health: {
       state: String(health.state || 'active'),
       attempts: Math.max(0, Number(health.attempts) || 0),
@@ -98,6 +105,32 @@ export function buildHomeAssistantState({
     tasks: taskStates,
     printers: buildPrinterStates(config.tasks?.finishPrint || {}, runs, timezone)
   };
+}
+
+function homeAssistantSchedule(schedule) {
+  const pending = (Array.isArray(schedule) ? schedule : [])
+    .filter((item) => item?.status === 'pending' && item.runAt)
+    .map((item, index) => {
+      const task = publicTaskId(item.taskId);
+      const plannedAt = String(item.runAt);
+      const detail = String(item.detail || '');
+      return {
+        id: shortHash(`${task}\n${detail}\n${plannedAt}`),
+        task,
+        name: String(item.label || item.taskId || ''),
+        detail,
+        plannedAt,
+        position: index
+      };
+    });
+  return {
+    revision: shortHash(JSON.stringify(pending.map(({ id }) => id))),
+    pending
+  };
+}
+
+function shortHash(value) {
+  return createHash('sha256').update(String(value || '')).digest('hex').slice(0, 16);
 }
 
 function latestShopOrder(orders) {

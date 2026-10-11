@@ -1272,6 +1272,7 @@ function sanitizeConfig(config) {
 async function homeAssistantState() {
   const config = await readConfig();
   const runs = await readRuns();
+  const schedule = buildSchedulePreview(config, runs);
   return buildHomeAssistantState({
     config,
     runs,
@@ -1279,6 +1280,7 @@ async function homeAssistantState() {
     browser: browserManagerState(),
     dailyCounters: buildDailyCounters(config, runs),
     nextExecutions: buildNextExecutions(config, runs),
+    schedule,
     health: buildHealthMetrics(config, runs)
   });
 }

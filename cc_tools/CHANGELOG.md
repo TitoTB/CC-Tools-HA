@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.27
+
+- Expone a Home Assistant la planificación pendiente y su revisión estable.
+- Añade el estado detallado de la ejecución activa y la detección `stale` del planificador.
+- Proporciona la información necesaria para el reinicio automático seguro de la integración.
+
 ## 1.0.26
 
 - Limita los comentarios a diseños cuya descarga haya sido verificada.

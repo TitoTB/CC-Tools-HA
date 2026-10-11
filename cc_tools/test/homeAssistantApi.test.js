@@ -19,10 +19,40 @@ test('crea una instantánea estable para Home Assistant', () => {
   const state = buildHomeAssistantState({
     config,
     runs,
-    scheduler: { running: true, runningTask: 'modelDownloads' },
+    scheduler: {
+      running: true,
+      runningTask: 'modelDownloads',
+      runningSource: 'schedule',
+      startedAt: '2026-09-27T09:58:00.000Z',
+      timeoutAt: '2026-09-27T10:08:00.000Z',
+      stale: false
+    },
     browser: { active: true, mode: 'automation' },
     dailyCounters: { finishPrint: 1, modelDownloads: 2 },
     nextExecutions: { modelDownloads: '2026-09-27T10:00:00.000Z' },
+    schedule: [
+      {
+        taskId: 'modelDownloads',
+        label: 'Descarga de diseños',
+        detail: 'Diseño 3 de 30',
+        runAt: '2026-09-27T10:00:00.000Z',
+        status: 'pending'
+      },
+      {
+        taskId: 'comments',
+        label: 'Comentarios',
+        detail: 'Comentario 1 de 6',
+        runAt: '2026-09-27T10:20:00.000Z',
+        status: 'pending'
+      },
+      {
+        taskId: 'modelLikes',
+        label: 'Dar me gusta',
+        detail: 'Ejecución de hoy',
+        runAt: '2026-09-27T09:00:00.000Z',
+        status: 'done'
+      }
+    ],
     health: { state: 'active', successRate: 100 }
   });
 
@@ -30,6 +60,12 @@ test('crea una instantánea estable para Home Assistant', () => {
   assert.equal(state.account.name, 'Aguacatec');
   assert.equal(state.tasks.downloads.dailyCount, 2);
   assert.equal(state.scheduler.runningTask, 'downloads');
+  assert.equal(state.scheduler.runningSource, 'schedule');
+  assert.equal(state.scheduler.startedAt, '2026-09-27T09:58:00.000Z');
+  assert.equal(state.scheduler.stale, false);
+  assert.deepEqual(state.schedule.pending.map((item) => item.task), ['downloads', 'comments']);
+  assert.equal(state.schedule.pending[0].plannedAt, '2026-09-27T10:00:00.000Z');
+  assert.match(state.schedule.revision, /^[a-f0-9]{16}$/);
   assert.equal(state.printers[0].lastGcode, 'pieza.gcode');
   assert.equal(state.orders.pending, 1);
   assert.equal(state.orders.latest.status, 'Pendiente');
