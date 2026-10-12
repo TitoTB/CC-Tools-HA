@@ -26,6 +26,8 @@ jobs:
           cache-dependency-path: cc_tools/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
       - name: Run tests
         run: npm test
 
