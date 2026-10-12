@@ -2850,6 +2850,7 @@ function favoriteIndexStatus(value) {
     pending: { key: 'pending', label: 'Pendiente' },
     syncing: { key: 'syncing', label: 'Indexando' },
     ready: { key: 'ready', label: 'Actualizado' },
+    empty: { key: 'ready', label: 'Sin diseños' },
     error: { key: 'error', label: 'Error' }
   })[value] || { key: 'pending', label: 'Pendiente' };
 }
@@ -2863,10 +2864,12 @@ async function addFavoriteProfile() {
 
   const button = $('#add-favorite-profile');
   button.disabled = true;
+  button.textContent = 'Comprobando diseños...';
   try {
     const result = await api('/api/creality/favorites', { method: 'POST', body: { url } });
     if (!result.ok) {
       toast(errorMessage(result.error, result));
+      if (result.profileUrl) await refresh().catch(() => {});
       return;
     }
     state.config.crealityFavorites = result.favorites;
@@ -2875,6 +2878,7 @@ async function addFavoriteProfile() {
     toast('Perfil añadido a favoritos.');
   } finally {
     button.disabled = false;
+    button.textContent = 'Añadir';
   }
 }
 
@@ -3470,6 +3474,12 @@ function renderRunDetails(run) {
   ]);
   const items = [];
 
+  const admission = run.details?.profileAdmission;
+  const admissionProfile = admission && parseFavoriteProfileUrlForLog(admission.url);
+  if (admissionProfile) {
+    items.push(`<li><a href="${escapeHtml(admissionProfile)}" target="_blank" rel="noreferrer">Abrir perfil</a></li>`);
+  }
+
   for (const failure of failures) {
     const title = escapeHtml(failure.title || 'Diseño desconocido');
     const error = escapeHtml(failure.error || 'Error desconocido');
@@ -3510,6 +3520,14 @@ function renderRunDetails(run) {
 
   const resultDetails = items.length ? `<ul class="run-details">${items.join('')}</ul>` : '';
   return `${resultDetails}${renderDiagnostics(diagnostics)}`;
+}
+
+function parseFavoriteProfileUrlForLog(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && ['crealitycloud.com', 'www.crealitycloud.com'].includes(url.hostname)
+      && /^\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?user\/\d+(?:\/|$)/.test(url.pathname) ? url.href : '';
+  } catch { return ''; }
 }
 
 function renderDiagnostics(diagnostics) {
@@ -3655,6 +3673,10 @@ function errorMessage(error, payload = {}) {
     FAVORITE_PROFILE_NOT_FOUND: 'No se pudo encontrar ese perfil en Creality Cloud.',
     FAVORITE_PROFILE_DEFAULT: 'El perfil predeterminado no se puede eliminar.',
     FAVORITE_PROFILE_UNAVAILABLE: 'No se pudieron obtener los datos del perfil.',
+    FAVORITE_PROFILE_NO_MODELS: 'Este perfil todavía no tiene diseños publicados para seguir. No se ha añadido a favoritos. Inténtalo de nuevo más adelante.',
+    FAVORITE_PROFILE_MODELS_UNCONFIRMED: 'No se ha podido comprobar si este perfil tiene diseños. No se ha añadido a favoritos. Inténtalo de nuevo cuando cargue correctamente.',
+    FAVORITE_PROFILE_ACCOUNT_CHANGED: 'La cuenta ha cambiado durante la comprobación. Vuelve a añadir el perfil.',
+    FAVORITE_PROFILE_NOTICE_LOG_FAILED: 'No se ha añadido el perfil y no se ha podido guardar el aviso en el Log. Inténtalo de nuevo más adelante.',
     FINISH_PRINT_PRINTER_DUPLICATE: 'Cada impresora solo puede aparecer en un bloque.',
     FINISH_PRINT_PRINTER_REQUIRED: 'Selecciona una impresora en cada bloque.',
     FINISH_PRINT_PROFILE_PENDING: 'No puedes eliminar la impresora que tiene una impresión pendiente de verificar.',
@@ -3668,6 +3690,7 @@ function labelStatus(status) {
     success: 'Correcto',
     failed: 'Fallido',
     error: 'Error',
+    warning: 'Aviso',
     skipped: 'Sin trabajo pendiente',
     started: 'Iniciado'
   })[status] || status || '-';

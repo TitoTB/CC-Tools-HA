@@ -3484,6 +3484,10 @@ textarea {
   border-left-color: var(--ok);
 }
 
+.run-warning {
+  border-left-color: var(--warn);
+}
+
 .run-failed,
 .run-error {
   border-left-color: var(--bad);

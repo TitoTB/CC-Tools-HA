@@ -37,7 +37,8 @@ import {
 import { readCrealityProfile } from './crealityProfile.js';
 import { startDesignMetadataRepair, stopDesignMetadataRepair } from './designMetadataRepair.js';
 import { readFavoriteProfile } from './crealityFavoriteProfile.js';
-import { DEFAULT_FAVORITE_PROFILE, normalizeFavoriteProfiles, parseFavoriteProfileUrl } from './favoriteProfiles.js';
+import { createFavoriteProfileHandler } from './favoriteProfileAdmission.js';
+import { DEFAULT_FAVORITE_PROFILE, normalizeFavoriteProfiles } from './favoriteProfiles.js';
 import {
   favoriteProfilesRefreshRunning,
   queueFavoriteProfileSync,
@@ -262,39 +263,9 @@ app.post('/api/creality/profile/refresh', async (req, res) => {
   }
 });
 
-app.post('/api/creality/favorites', async (req, res) => {
-  const parsed = parseFavoriteProfileUrl(req.body?.url);
-  if (!parsed) {
-    return res.status(400).json({ ok: false, error: 'FAVORITE_PROFILE_URL_INVALID' });
-  }
-  try {
-    const config = await readConfig();
-    if (!config.crealityProfile?.userId) {
-      config.crealityProfile = await readCrealityProfile();
-      await writeConfig(config);
-    }
-    if (String(config.crealityProfile?.userId || '') === parsed.userId) {
-      return res.status(400).json({ ok: false, error: 'FAVORITE_PROFILE_IS_OWN' });
-    }
-
-    const favorites = normalizeFavoriteProfiles(config.crealityFavorites);
-    if (favorites.some((profile) => profile.userId === parsed.userId)) {
-      return res.status(409).json({ ok: false, error: 'FAVORITE_PROFILE_DUPLICATE' });
-    }
-
-    const profile = await readFavoriteProfile(parsed.profileUrl);
-    profile.indexStatus = 'pending';
-    config.crealityFavorites = normalizeFavoriteProfiles([...favorites, profile]);
-    await writeConfig(config);
-    queueFavoriteProfileSync(profile, { full: true, source: 'manual' });
-    return res.json({ ok: true, favorites: config.crealityFavorites });
-  } catch (error) {
-    return res.status(409).json({
-      ok: false,
-      error: error.code || error.message || 'FAVORITE_PROFILE_UNAVAILABLE'
-    });
-  }
-});
+app.post('/api/creality/favorites', createFavoriteProfileHandler({
+  readConfig, writeConfig, readCrealityProfile, readFavoriteProfile, queueFavoriteProfileSync, appendRun
+}));
 
 app.post('/api/creality/favorites/refresh', async (req, res) => {
   const config = await readConfig();

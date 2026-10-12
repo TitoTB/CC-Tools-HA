@@ -1,6 +1,7 @@
 import { withIsolatedBrowser } from './browserManager.js';
 import { canonicalModelUrl, modelKeyFromUrl } from './modelIdentity.js';
-import { normalizeFavoriteProfiles } from './favoriteProfiles.js';
+import { normalizeFavoriteProfiles, normalizeFavoriteAvatarUrl } from './favoriteProfiles.js';
+import { readFavoriteProfileFromPage } from './crealityFavoriteProfile.js';
 import { appendRun, readConfig, readDesigns, readRuns, reconcileFavoriteModels, writeConfig } from './storage.js';
 
 const FULL_SYNC_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -98,12 +99,20 @@ export async function queueConfiguredFavoriteSyncs() {
   const profiles = normalizeFavoriteProfiles(config.crealityFavorites);
   const now = Date.now();
   for (const profile of profiles) {
-    const emptyIndex = profile.indexedModelCount === 0;
-    const full = emptyIndex || !profile.fullIndexedAt || now - Date.parse(profile.fullIndexedAt) >= FULL_SYNC_INTERVAL_MS;
-    const stale = emptyIndex || !profile.indexedAt || now - Date.parse(profile.indexedAt) >= DELTA_SYNC_INTERVAL_MS;
-    if (full || stale) queueFavoriteProfileSync(profile, { full });
+    const plan = favoriteSyncPlan(profile, now);
+    if (plan.due) queueFavoriteProfileSync(profile, { full: plan.full });
   }
   return profiles;
+}
+
+export function favoriteSyncPlan(profile, now = Date.now()) {
+  const checkedAt = Date.parse(profile.indexedAt || '');
+  const fullAt = Date.parse(profile.fullIndexedAt || '');
+  const full = !Number.isFinite(fullAt) || now - fullAt >= FULL_SYNC_INTERVAL_MS;
+  const elapsed = Number.isFinite(checkedAt) ? now - checkedAt : Number.POSITIVE_INFINITY;
+  if (profile.indexStatus === 'error') return { due: elapsed >= RETRY_SYNC_INTERVAL_MS, full };
+  const stale = elapsed >= DELTA_SYNC_INTERVAL_MS;
+  return { due: full || stale || profile.indexStatus === 'pending', full };
 }
 
 export function shouldSyncConfiguredFavorites(config = {}) {
@@ -120,22 +129,26 @@ export async function syncFavoriteProfile(profile, options = {}) {
     .filter(Boolean));
 
   const scan = await scanFavoriteProfile(profile, { full, knownKeys });
+  const avatarUrl = scan.identity?.userId === String(profile.userId)
+    ? normalizeFavoriteAvatarUrl(scan.identity.avatarUrl) : '';
+  if (avatarUrl) await updateProfileSyncState(profile.userId, { avatarUrl });
   const models = scan.models;
-  if (!models.length) {
-    throw new Error('La página del perfil se cargó sin ningún diseño; se reintentará la indexación.');
+  const confirmedEmpty = models.length === 0 && scan.emptyConfirmed === true && scan.complete === true;
+  if (!models.length && !confirmedEmpty) {
+    throw new Error('No se pudo confirmar el listado de diseños del perfil. Se conserva el índice anterior y se reintentará la consulta.');
   }
   const currentConfig = await readConfig();
   if (!normalizeFavoriteProfiles(currentConfig.crealityFavorites).some((item) => item.userId === profile.userId)) {
     return { ok: false, removed: true, models: 0 };
   }
 
-  const reconciledFull = full && scan.complete;
+  const reconciledFull = (full || confirmedEmpty) && scan.complete;
   const reconciliation = await reconcileFavoriteModels(profile, models, { full: reconciledFull });
   const indexedModels = (await readDesigns()).filter((design) =>
     String(design.favoriteProfileId || '') === String(profile.userId || '')
       && design.favoriteActive === true);
   const indexedModelCount = indexedModels.length;
-  if (indexedModelCount === 0) {
+  if (indexedModelCount === 0 && !confirmedEmpty) {
     const error = new Error('La indexación encontró diseños, pero no pudo guardarlos; se reintentará más tarde.');
     error.technical = {
       scannedModels: models.length,
@@ -147,10 +160,10 @@ export async function syncFavoriteProfile(profile, options = {}) {
     };
     throw error;
   }
-  const lastModelIndexedAt = latestDiscoveredAt(indexedModels, profile.lastModelIndexedAt);
+  const lastModelIndexedAt = confirmedEmpty ? '' : latestDiscoveredAt(indexedModels, profile.lastModelIndexedAt);
   const timestamp = new Date().toISOString();
   await updateProfileSyncState(profile.userId, {
-    indexStatus: 'ready',
+    indexStatus: confirmedEmpty ? 'empty' : 'ready',
     indexedAt: timestamp,
     fullIndexedAt: reconciledFull ? timestamp : profile.fullIndexedAt,
     lastModelIndexedAt,
@@ -171,8 +184,14 @@ export async function scanFavoriteProfile(profile, options = {}) {
   return withIsolatedBrowser({}, async (context) => {
     const page = context.pages()[0] || await context.newPage();
     await page.goto(`${profile.profileUrl}/model`, { waitUntil: 'domcontentloaded' });
-    await page.locator('a[href*="model-detail"]').first().waitFor({ state: 'attached', timeout: 45000 }).catch(() => {});
+    await page.locator('.user-model-container a[href*="model-detail"], .user-model-container .empty_comp').first().waitFor({ state: 'visible', timeout: 45000 }).catch(() => {});
     await page.waitForTimeout(2500);
+    const identity = await readFavoriteProfileFromPage(page, profile.profileUrl, { timeout: 10000 })
+      .catch(() => null);
+
+    if (await isConfirmedEmptyFavoritePage(page, profile, identity)) {
+      return { models: [], complete: true, emptyConfirmed: true, identity };
+    }
 
     const found = new Map();
     let stagnantRounds = 0;
@@ -180,7 +199,7 @@ export async function scanFavoriteProfile(profile, options = {}) {
     let previousCount = 0;
     let complete = !options.full;
     for (let round = 0; round < 120; round += 1) {
-      const links = await page.locator('a[href*="model-detail"]').evaluateAll((anchors) => anchors.map((anchor) => ({
+      const links = await page.locator('.user-model-container a[href*="model-detail"]').evaluateAll((anchors) => anchors.map((anchor) => ({
         href: anchor.href,
         title: anchor.getAttribute('title') || anchor.querySelector('img')?.getAttribute('alt') || anchor.textContent || ''
       }))).catch(() => []);
@@ -214,8 +233,20 @@ export async function scanFavoriteProfile(profile, options = {}) {
       await page.evaluate(() => window.scrollTo(0, Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0)));
       await page.waitForTimeout(1200);
     }
-    return { models: Array.from(found.values()), complete };
+    return { models: Array.from(found.values()), complete, identity };
   });
+}
+
+export async function isConfirmedEmptyFavoritePage(page, profile, identity) {
+  if (!identity || identity.userId !== String(profile.userId)) return false;
+  // Absence of links is not proof: require the correct visible profile ID and
+  // the store's explicit empty component inside the published-model list.
+  const visibleId = await page.locator('.user-id').first().textContent().catch(() => '');
+  if (String(visibleId).match(/ID\s*:\s*(\d+)/i)?.[1] !== String(profile.userId)) return false;
+  const empty = page.locator('.user-model-container .loading-layout .empty_comp');
+  if (!await empty.isVisible().catch(() => false)) return false;
+  const models = await page.locator('.user-model-container a[href*="model-detail"]').count();
+  return models === 0;
 }
 
 export function selectFavoriteCandidates(designs = [], field = '', ownUserId = '') {
