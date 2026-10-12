@@ -120,6 +120,25 @@ test('solo las incidencias globales confirmadas pueden detener el scheduler', ()
   assert.equal(isGlobalBlockingIncident({ reasonCode: 'SECURITY_CHALLENGE' }), true);
 });
 
+test('una sesión cerrada pausa las automatizaciones sin caducidad automática', () => {
+  const config = { automationHealth: { state: 'active' } };
+  const event = updateAutomationHealth(config, 'modelDownloads', 'error', {
+    details: {
+      incident: {
+        code: 'LOGIN_REQUIRED',
+        message: 'La sesión de Creality Cloud no está iniciada.',
+        systemic: true
+      }
+    }
+  });
+
+  assert.equal(event.paused, true);
+  assert.equal(config.automationHealth.state, 'paused');
+  assert.equal(config.automationHealth.reasonCode, 'LOGIN_REQUIRED');
+  assert.equal(config.automationHealth.pausedUntil, '');
+  assert.equal(config.automationHealth.pauseSource, 'session');
+});
+
 test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilidad temporal', () => {
   assert.equal(transientCrealityServiceFailure({
     message: 'page.goto: Timeout 30000ms exceeded.'

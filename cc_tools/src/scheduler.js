@@ -27,6 +27,7 @@ import {
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
 import { abortAutomationBrowser } from './browserManager.js';
+import { pauseForExpiredSession } from './sessionHealth.js';
 
 const TASK_IDS = [
   'creality',
@@ -62,6 +63,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
   }
   await recoverExpiredSchedulerRun();
   const startedAt = new Date().toISOString();
+  const scheduledFor = source === 'schedule' ? String(options.scheduledFor || '') : '';
   if (running) {
     const error = new Error(`Ya hay una ejecución en curso${runningTask ? ` (${taskDisplayName(runningTask)})` : ''}. Inténtalo de nuevo cuando termine.`);
     error.code = 'TASK_ALREADY_RUNNING';
@@ -98,7 +100,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
     );
     const serviceFailure = transientCrealityServiceFailure(result.details?.incident);
     if (source === 'schedule' && serviceFailure) {
-      return deferScheduledServiceFailure(taskId, serviceFailure, startedAt);
+      return deferScheduledServiceFailure(taskId, serviceFailure, startedAt, scheduledFor);
     }
     const status = result.skipped ? 'skipped' : result.success ? 'success' : 'failed';
     const message = formatRunMessage(taskId, status, result);
@@ -118,6 +120,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
       status,
       message,
       startedAt,
+      scheduledFor,
       finishedAt: new Date().toISOString(),
       screenshots: result.screenshots || [],
       details: result.details || {}
@@ -165,6 +168,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
         status: 'skipped',
         message,
         startedAt,
+        scheduledFor,
         finishedAt: cancelledAt,
         screenshots: [],
         details: {
@@ -192,7 +196,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
 
     const serviceFailure = transientCrealityServiceFailure(error);
     if (source === 'schedule' && serviceFailure) {
-      return deferScheduledServiceFailure(taskId, serviceFailure, startedAt);
+      return deferScheduledServiceFailure(taskId, serviceFailure, startedAt, scheduledFor);
     }
 
     if (source === 'schedule'
@@ -234,7 +238,8 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
       : '';
     const { runMessage, details } = await appendExecutionError(taskId, source, startedAt, error, {
       status: scheduledTimeout ? 'skipped' : 'error',
-      message: retryMessage
+      message: retryMessage,
+      scheduledFor
     });
     error.runLogged = true;
 
@@ -272,7 +277,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
   }
 }
 
-async function deferScheduledServiceFailure(taskId, failure, startedAt = new Date().toISOString()) {
+async function deferScheduledServiceFailure(taskId, failure, startedAt = new Date().toISOString(), scheduledFor = '') {
   const freshConfig = await readConfig();
   const event = recordCrealityServiceFailure(freshConfig, taskId, failure, new Date());
   delayPendingTaskPlan(freshConfig.tasks[taskId], taskId, event.retryAt);
@@ -290,6 +295,7 @@ async function deferScheduledServiceFailure(taskId, failure, startedAt = new Dat
     status: 'skipped',
     message: `${failure.message} Reintento automático en ${event.retryMinutes} minutos.`,
     startedAt,
+    scheduledFor,
     finishedAt,
     screenshots: [],
     details
@@ -461,10 +467,10 @@ async function tick() {
         continue;
       }
       const options = taskId === 'modelDownloads'
-        ? { single: true }
+        ? { single: true, scheduledFor: task.nextRunAt }
         : taskId === 'comments'
-          ? { commentKind: scheduledCommentKind(task) }
-          : {};
+          ? { commentKind: scheduledCommentKind(task), scheduledFor: task.nextRunAt }
+          : { scheduledFor: task.nextRunAt };
       await runTaskNow(taskId, 'schedule', options).catch((error) => {
         console.error('[scheduler]', error.message);
       });
@@ -525,14 +531,21 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
   const startedAt = now.toISOString();
   const timeoutMs = taskExecutionTimeoutMs();
   const runToken = beginSchedulerRun('shopRedemption', 'schedule-maintenance', timeoutMs, now);
+  const previousStatus = goal.lastStatus;
+  const previousMessage = goal.lastMessage;
   try {
     goal.lastAttemptAt = startedAt;
+    goal.enabled = false;
+    goal.lastStatus = 'submitting';
+    goal.lastMessage = 'Canje iniciado. Si se interrumpe, comprueba los pedidos antes de volver a programarlo.';
+    await writeConfig(config);
     const result = await executeWithTimeout(redeemShopGoal(goal), {
       timeoutMs,
       taskId: 'shopRedemption',
       source: 'schedule-maintenance',
       onTimeout: abortAutomationBrowser
     });
+    if (runToken !== activeRunToken) return true;
     goal.lastCheckedAt = new Date().toISOString();
     if (result.product) {
       goal.name = result.product.name;
@@ -543,22 +556,29 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
     if (Number.isFinite(result.availablePoints)) config.points.total = result.availablePoints;
 
     if (result.insufficient) {
+      goal.enabled = true;
       goal.lastStatus = 'waiting';
       goal.lastMessage = 'El saldo todavía no alcanza el precio actualizado del objetivo.';
       await writeConfig(config);
       return true;
     }
     if (result.unavailable) {
+      goal.enabled = true;
       goal.lastStatus = 'unavailable';
       goal.lastMessage = 'El objetivo no está disponible actualmente; se volverá a comprobar.';
       await writeConfig(config);
       return true;
     }
 
+    if (result.success !== true || !result.orderNumber) {
+      const error = new Error('El canje no tiene un pedido confirmado. Revisa los pedidos antes de volver a programarlo.');
+      error.code = 'SHOP_REDEEM_UNVERIFIED';
+      throw error;
+    }
     goal.enabled = false;
     goal.redeemedAt = new Date().toISOString();
     goal.lastStatus = 'success';
-    goal.lastMessage = `Objetivo canjeado: ${goal.name}.`;
+    goal.lastMessage = `Objetivo canjeado: ${goal.name}. Pedido: ${result.orderNumber}.`;
     if (Number.isFinite(result.remainingPoints)) config.points.total = result.remainingPoints;
     await writeConfig(config);
     await appendRun({
@@ -569,7 +589,7 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
       startedAt,
       finishedAt: new Date().toISOString(),
       screenshots: [],
-      details: { product: { id: goal.productId, name: goal.name, points: goal.points, imageUrl: goal.imageUrl } }
+      details: { orderNumber: result.orderNumber, product: { id: goal.productId, name: goal.name, points: goal.points, imageUrl: goal.imageUrl } }
     });
     if (config.telegram.enabled && config.telegram.notifyOnShopRedemption !== false) {
       await sendTelegram(config, `🎁 CC Tools: Objetivo canjeado\n${goal.name}\n${goal.points} puntos`).catch((error) => {
@@ -578,10 +598,48 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
     }
     return true;
   } catch (error) {
-    if (['BROWSER_BUSY', 'REMOTE_BROWSER_OPEN'].includes(error.code)) return false;
+    if (runToken !== activeRunToken) return true;
+    if (['BROWSER_BUSY', 'REMOTE_BROWSER_OPEN'].includes(error.code)) {
+      goal.enabled = true;
+      goal.lastStatus = previousStatus;
+      goal.lastMessage = previousMessage;
+      await writeConfig(config);
+      return false;
+    }
+    if (error.code === 'LOGIN_REQUIRED') {
+      goal.enabled = true;
+      goal.lastStatus = previousStatus;
+      goal.lastMessage = previousMessage;
+      const event = pauseForExpiredSession(config, 'shopRedemption', error.diagnostic || error);
+      await writeConfig(config);
+      const diagnostic = await diagnoseTaskError(error, null, null, {
+        code: 'LOGIN_REQUIRED',
+        category: 'session',
+        systemic: true,
+        message: error.message
+      });
+      await appendRun({
+        taskId: 'shopRedemption',
+        source: 'schedule',
+        status: 'error',
+        message: error.message,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        screenshots: [],
+        details: { failures: [{ title: goal.name, error: error.message, diagnostic }], diagnostics: [diagnostic] }
+      });
+      if (event.notificationRequired && config.telegram.enabled) {
+        await sendTelegram(
+          config,
+          '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
+        ).catch((telegramError) => console.error('[telegram]', telegramError.message));
+      }
+      return true;
+    }
     goal.lastAttemptAt = startedAt;
-    goal.lastStatus = 'error';
-    goal.lastMessage = error.message || 'No se pudo canjear el objetivo.';
+    goal.enabled = false;
+    goal.lastStatus = 'paused';
+    goal.lastMessage = `${error.message || 'No se pudo canjear el objetivo.'} Canje automático pausado; revisa los pedidos y pulsa Programar para reactivarlo.`;
     await writeConfig(config);
     const diagnostic = await diagnoseTaskError(error, null, null, {
       code: error.code || 'SHOP_REDEMPTION_FAILED',
@@ -812,6 +870,7 @@ async function appendExecutionError(taskId, source, startedAt, error, options = 
     status: options.status || 'error',
     message: runMessage,
     startedAt,
+    scheduledFor: options.scheduledFor || '',
     finishedAt: new Date().toISOString(),
     screenshots: error.screenshot ? [error.screenshot] : [],
     details
@@ -1096,7 +1155,14 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
   if (status === 'skipped') return;
 
   if (healthEvent.paused) {
-    if (shouldNotifyIncident(config, taskId)) {
+    if (healthEvent.incident?.code === 'LOGIN_REQUIRED' && config.telegram.enabled) {
+      await sendTelegram(
+        config,
+        '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
+      ).catch((error) => {
+        console.error('[telegram]', error.message);
+      });
+    } else if (shouldNotifyIncident(config, taskId)) {
       const pauseUntil = formatPauseUntil(healthEvent.pausedUntil, config.tasks?.[taskId]?.timezone);
       const source = healthEvent.pauseSource === 'retry-after' ? ' (indicado por Creality Cloud)' : '';
       await sendTelegram(config, `❌ CC Tools: Automatizaciones pausadas\n${healthEvent.reason}${pauseUntil ? `\nReanudación prevista: ${pauseUntil}${source}` : ''}\nRevisa el diagnóstico en Logs.`).catch((error) => {
@@ -1333,6 +1399,7 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       ? Math.max(0, Number(health.rewardCooldownCount) || 0)
       : 0;
     const rewardCooldownCount = rewardCooldown ? previousRewardCount + 1 : previousRewardCount;
+    const loginRequired = incident.code === 'LOGIN_REQUIRED';
     const durationMs = incidentPauseMilliseconds(incident, now);
     const pauseSource = ['RATE_LIMITED', 'RATE_LIMIT_CONFIRMED'].includes(incident.code)
       && parseRetryAfterMilliseconds(incident.retryAfter, now) !== null
@@ -1344,11 +1411,11 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       reasonCode: incident.code,
       reason: incident.message,
       pausedAt: now.toISOString(),
-      pausedUntil: new Date(now.getTime() + durationMs).toISOString(),
+      pausedUntil: loginRequired ? '' : new Date(now.getTime() + durationMs).toISOString(),
       lastIncidentAt: now.toISOString(),
       rewardCooldownDate: rewardCooldown ? rewardCooldownDate : health.rewardCooldownDate || '',
       rewardCooldownCount,
-      pauseSource,
+      pauseSource: loginRequired ? 'session' : pauseSource,
       pauseTaskId: taskId
     };
     return {
@@ -1357,7 +1424,7 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       reason: incident.message,
       incident,
       pausedUntil: config.automationHealth.pausedUntil,
-      pauseSource
+      pauseSource: config.automationHealth.pauseSource
     };
   }
 

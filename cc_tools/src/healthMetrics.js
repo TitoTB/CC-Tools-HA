@@ -42,7 +42,35 @@ export function buildHealthMetrics(config, runs = [], now = new Date()) {
     reasonCode: health.reasonCode || '',
     reason: health.reason || '',
     pausedUntil: health.pausedUntil || '',
-    pauseSource: health.pauseSource || ''
+    pauseSource: health.pauseSource || '',
+    latestExecution: classifyLatestExecution(runs[0])
+  };
+}
+
+export function classifyLatestExecution(run, delayThresholdMs = 5 * 60 * 1000) {
+  if (!run) {
+    return { status: 'none', label: 'Sin datos', detail: '' };
+  }
+
+  if (['failed', 'error'].includes(run.status)) {
+    return {
+      status: 'failed',
+      label: 'Fallida',
+      detail: run.finishedAt || run.createdAt || ''
+    };
+  }
+
+  const startedAt = Date.parse(run.startedAt || run.createdAt || '');
+  const scheduledFor = Date.parse(run.scheduledFor || '');
+  const delayed = run.source === 'schedule'
+    && Number.isFinite(startedAt)
+    && Number.isFinite(scheduledFor)
+    && startedAt - scheduledFor > delayThresholdMs;
+
+  return {
+    status: delayed ? 'delayed' : 'on-time',
+    label: delayed ? 'Con retraso' : 'Puntual',
+    detail: run.finishedAt || run.createdAt || ''
   };
 }
 

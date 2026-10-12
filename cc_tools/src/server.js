@@ -66,6 +66,7 @@ import { CATALOG_CATEGORIES, normalizeCatalogCategories } from './modelDownloadT
 import { normalizeShopGoal, readShopCatalog } from './shopGoal.js';
 import { readShopOrders } from './shopOrders.js';
 import { notifyShippedShopOrders } from './shopOrderNotifications.js';
+import { pauseForExpiredSession, resumeAfterAuthenticatedLogin } from './sessionHealth.js';
 import {
   archiveShopOrder,
   markShopOrdersRefreshError,
@@ -258,6 +259,7 @@ app.post('/api/creality/profile/refresh', async (req, res) => {
     await writeConfig(config);
     return res.json({ ok: true, profile });
   } catch (error) {
+    if (error.code === 'LOGIN_REQUIRED') await pauseForLoginAndNotify('profileRefresh', error);
     return res.status(409).json({ ok: false, error: error.code || error.message || 'CREALITY_PROFILE_UNAVAILABLE' });
   }
 });
@@ -282,7 +284,7 @@ app.post('/api/creality/favorites', async (req, res) => {
       return res.status(409).json({ ok: false, error: 'FAVORITE_PROFILE_DUPLICATE' });
     }
 
-    const profile = await readFavoriteProfile(parsed.profileUrl);
+    const profile = await readFavoriteProfile(parsed.profileUrl, { requirePublishedDesign: true });
     profile.indexStatus = 'pending';
     config.crealityFavorites = normalizeFavoriteProfiles([...favorites, profile]);
     await writeConfig(config);
@@ -312,6 +314,23 @@ app.post('/api/creality/favorites/refresh', async (req, res) => {
     ok: true,
     favorites,
     alreadyRunning
+  });
+});
+
+app.get('/api/runs', async (req, res) => {
+  const runs = await readRuns();
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 20));
+  const total = runs.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(totalPages, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
+  const offset = (page - 1) * pageSize;
+  res.json({
+    ok: true,
+    page,
+    pageSize,
+    total,
+    totalPages,
+    items: runs.slice(offset, offset + pageSize)
   });
 });
 
@@ -473,6 +492,7 @@ app.post('/api/tasks/finish-print/status', async (req, res) => {
     }
     res.json({ ok: true, printers: statuses, pendingVerification: task.pendingVerification || null });
   } catch (error) {
+    if (error.code === 'LOGIN_REQUIRED') await pauseForLoginAndNotify('finishPrintStatus', error);
     res.status(409).json({
       ok: false,
       error: error.code || error.message,
@@ -610,6 +630,7 @@ app.post('/api/tasks/finish-print/run', async (req, res) => {
     const result = await runTaskNow('finishPrint', 'manual');
     res.json({ ok: true, ...result });
   } catch (error) {
+    if (error.code === 'LOGIN_REQUIRED') await pauseForLoginAndNotify('finishPrintManual', error);
     res.status(409).json({
       ok: false,
       error: error.code || 'FINISH_PRINT_EXECUTION_FAILED',
@@ -1217,11 +1238,48 @@ app.post('/api/tasks/creality/login/open', async (req, res) => {
 app.post('/api/tasks/creality/login/close', async (req, res) => {
   try {
     const result = await closeLoginBrowser();
-    res.json({ ok: true, result });
+    const profile = await readCrealityProfile();
+    const config = await readConfig();
+    const resumed = resumeAfterAuthenticatedLogin(config, profile);
+    await writeConfig(config);
+    if (resumed && config.telegram.enabled) {
+      await sendTelegram(
+        config,
+        '✅ CC Tools: Sesión de Creality Cloud restablecida\nLas automatizaciones se han reanudado.'
+      ).catch((error) => console.error('[telegram]', error.message));
+    }
+    res.json({
+      ok: true,
+      result: {
+        ...result,
+        message: resumed
+          ? 'Sesión confirmada. Las automatizaciones se han reanudado.'
+          : 'Sesión confirmada correctamente.'
+      },
+      profile,
+      resumed
+    });
   } catch (error) {
-    res.status(500).json({ ok: false, error: error.message });
+    if (error.code === 'LOGIN_REQUIRED') await pauseForLoginAndNotify('login', error);
+    res.status(409).json({
+      ok: false,
+      error: error.code || 'LOGIN_CONFIRMATION_FAILED',
+      message: error.message || 'No se pudo confirmar la sesión de Creality Cloud.'
+    });
   }
 });
+
+async function pauseForLoginAndNotify(taskId, error) {
+  const config = await readConfig();
+  const event = pauseForExpiredSession(config, taskId, error.diagnostic || error);
+  await writeConfig(config);
+  if (event.notificationRequired && config.telegram.enabled) {
+    await sendTelegram(
+      config,
+      '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
+    ).catch((notificationError) => console.error('[telegram]', notificationError.message));
+  }
+}
 
 app.use('/screenshots', express.static(screenshotsDir()));
 app.use('/novnc', createProxyMiddleware({

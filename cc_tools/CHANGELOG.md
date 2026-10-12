@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.28
+
+- Detecta con mayor fiabilidad una sesión de Creality Cloud caducada y pausa las automatizaciones hasta completar un nuevo inicio de sesión.
+- Envía un único aviso de sesión cerrada y reanuda la actividad después de confirmar el acceso.
+- Refuerza el canje programado validando región, producto, precio, cantidad y número de pedido antes de registrar el éxito.
+- Evita repetir automáticamente un canje cuyo resultado no se pueda confirmar.
+- Actualiza los avatares de los perfiles favoritos e impide añadir perfiles sin diseños publicados.
+- Añade paginación y descarga de registros, y clasifica la última ejecución como puntual, retrasada o fallida.
+- Amplía el diagnóstico del navegador, del planificador y del estado de las impresoras.
+
 ## 1.0.27
 
 - Expone a Home Assistant la planificación pendiente y su revisión estable.

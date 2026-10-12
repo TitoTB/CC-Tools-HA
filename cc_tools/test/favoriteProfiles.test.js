@@ -69,3 +69,18 @@ test('an empty favorite index is never presented as ready', () => {
   assert.equal(profiles[1].indexStatus, 'pending');
   assert.equal(profiles[1].indexedModelCount, 0);
 });
+
+test('conserva el estado vacío confirmado de un perfil ya configurado', () => {
+  const profiles = normalizeFavoriteProfiles([{
+    userId: '123456789',
+    name: 'Maker',
+    profileUrl: 'https://www.crealitycloud.com/es/user/123456789',
+    indexStatus: 'empty',
+    indexedAt: '2026-10-12T08:00:00.000Z',
+    fullIndexedAt: '2026-10-12T08:00:00.000Z',
+    indexedModelCount: 0
+  }]);
+
+  assert.equal(profiles[1].indexStatus, 'empty');
+  assert.equal(profiles[1].indexedModelCount, 0);
+});

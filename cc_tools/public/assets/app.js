@@ -6,6 +6,13 @@ const state = {
   dailyCounters: {},
   healthMetrics: {},
   latestRuns: [],
+  logs: {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1,
+    items: []
+  },
   activeView: 'home',
   activeSettingsTab: 'session',
   designs: {
@@ -159,6 +166,10 @@ const fields = {
   notifyShopOrderShipped: $('#notify-shop-order-shipped'),
   runs: $('#runs'),
   healthSummary: $('#health-summary'),
+  logsPage: $('#logs-page'),
+  logsPrev: $('#logs-prev'),
+  logsNext: $('#logs-next'),
+  downloadVisibleLogs: $('#download-visible-logs'),
   pointsCounter: $('#points-counter'),
   pointsTotal: $('#points-total'),
   pointsToday: $('#points-today'),
@@ -250,6 +261,9 @@ $('#nav-designs').addEventListener('click', async () => {
 $('#nav-schedule').addEventListener('click', showSchedulePreview);
 $('#creality-menu-settings').addEventListener('click', () => showView('settings'));
 $('#creality-menu-logs').addEventListener('click', () => showView('logs'));
+fields.logsPrev.addEventListener('click', () => loadLogs(state.logs.page - 1));
+fields.logsNext.addEventListener('click', () => loadLogs(state.logs.page + 1));
+fields.downloadVisibleLogs.addEventListener('click', downloadVisibleLogs);
 fields.pointsCounter.addEventListener('click', () => openPointsHistory());
 $('#close-points-history').addEventListener('click', closePointsHistory);
 for (const button of $$('.points-unit-button')) {
@@ -951,7 +965,7 @@ $('#open-login').addEventListener('click', async () => {
 
 $('#close-login').addEventListener('click', async () => {
   const result = await api('/api/tasks/creality/login/close', { method: 'POST' });
-  toast(result.ok ? result.result.message : result.error);
+  toast(result.ok ? result.result.message : (result.message || result.error));
   if (result.ok) {
     profileRefreshAttempted = false;
     await refreshCrealityProfile();
@@ -1114,6 +1128,7 @@ async function refresh() {
   state.dailyCounters = result.dailyCounters || {};
   state.healthMetrics = result.healthMetrics || {};
   state.latestRuns = result.latestRuns || [];
+  if (state.logs.page === 1) state.logs.items = state.latestRuns;
   render();
   setFavoriteRefreshButtonLoading(state.favoriteProfilesRefreshRunning);
   if (state.favoriteProfilesRefreshRunning && !favoriteRefreshPollTimer) startFavoriteRefreshPolling();
@@ -1164,12 +1179,32 @@ async function refreshLiveCounters() {
   state.nextExecutions = result.nextExecutions || {};
   state.healthMetrics = result.healthMetrics || {};
   state.latestRuns = result.latestRuns || [];
+  if (state.logs.page === 1) state.logs.items = state.latestRuns;
   state.config.crealityFavorites = result.config?.crealityFavorites || state.config.crealityFavorites || [];
   renderNextExecutions();
   renderDailyCounters();
   renderFavoriteProfiles(state.config.crealityFavorites);
   renderRuns();
   renderHealthSummary();
+  if (state.activeView === 'logs') await loadLogs(state.logs.page);
+}
+
+async function loadLogs(page = 1) {
+  const requestedPage = Math.max(1, Number(page) || 1);
+  const result = await api(`/api/runs?page=${requestedPage}&pageSize=${state.logs.pageSize}`);
+  if (!result.ok) {
+    toast(errorMessage(result.error, result));
+    return;
+  }
+  state.logs = {
+    ...state.logs,
+    page: result.page || 1,
+    pageSize: result.pageSize || state.logs.pageSize,
+    total: result.total || 0,
+    totalPages: result.totalPages || 1,
+    items: result.items || []
+  };
+  renderRuns();
 }
 
 async function addCommentDraft() {
@@ -2421,7 +2456,9 @@ function showView(view) {
   for (const button of ['home', 'designs', 'settings', 'logs']) {
     $(`#nav-${button}`)?.classList.toggle('is-active', button === view);
   }
-  if (view === 'logs') refreshLiveCounters().catch(() => {});
+  if (view === 'logs') {
+    refreshLiveCounters().catch(() => {});
+  }
 }
 
 function retryViewerConnection(viewer, url) {
@@ -2777,6 +2814,8 @@ function setShopRegionMenu(open) {
 }
 
 function shopGoalStatusText(goal) {
+  if (goal.lastStatus === 'submitting') return 'Canje iniciado. Si se interrumpió, revisa los pedidos de Creality Cloud antes de volver a pulsar Programar.';
+  if (goal.lastStatus === 'paused') return goal.lastMessage || 'Canje pausado. Revisa los pedidos antes de volver a pulsar Programar.';
   if (goal.lastStatus === 'success') return `Canje completado el ${formatDate(goal.redeemedAt)}.`;
   if (goal.lastStatus === 'unavailable') return 'Objetivo no disponible temporalmente. Se volverá a comprobar.';
   if (goal.lastStatus === 'error') return `Último intento: ${goal.lastMessage || 'no se pudo completar el canje'}`;
@@ -2850,6 +2889,7 @@ function favoriteIndexStatus(value) {
     pending: { key: 'pending', label: 'Pendiente' },
     syncing: { key: 'syncing', label: 'Indexando' },
     ready: { key: 'ready', label: 'Actualizado' },
+    empty: { key: 'ready', label: 'Sin diseños' },
     error: { key: 'error', label: 'Error' }
   })[value] || { key: 'pending', label: 'Pendiente' };
 }
@@ -3142,15 +3182,19 @@ function renderHealthSummary() {
   const health = state.healthMetrics || {};
   const paused = health.state === 'paused';
   const degraded = health.state === 'degraded';
-  const status = paused ? 'Detenido' : degraded ? 'Intermitente' : 'Activo';
-  const pauseDetail = paused && health.pausedUntil
+  const sessionRequired = paused && health.reasonCode === 'LOGIN_REQUIRED';
+  const status = sessionRequired ? 'Sesión cerrada' : paused ? 'Detenido' : degraded ? 'Intermitente' : 'Activo';
+  const pauseDetail = sessionRequired
+    ? 'Automatizaciones pausadas hasta que vuelvas a iniciar sesión'
+    : paused && health.pausedUntil
     ? `Hasta ${formatDate(health.pausedUntil)}${health.pauseSource === 'retry-after' ? ' · indicado por Retry-After' : ''}`
     : paused ? (health.reason || '')
       : degraded ? 'Tasa de éxito inferior al 80%' : 'Automatizaciones disponibles';
   const attempts = Math.max(0, Number(health.attempts) || 0);
   const successes = Math.max(0, Number(health.successes) || 0);
   const incidents = Math.max(0, Number(health.failures) || 0);
-  const uncredited = Math.max(0, Number(health.rewardNotCredited) || 0);
+  const latestExecution = health.latestExecution || { status: 'none', label: 'Sin datos', detail: '' };
+  const latestDetail = latestExecution.detail ? formatDate(latestExecution.detail) : 'Todavía no hay ejecuciones';
 
   fields.healthSummary.innerHTML = `
     <div class="health-cell health-state ${paused ? 'is-paused' : degraded ? 'is-degraded' : 'is-active'}">
@@ -3159,13 +3203,13 @@ function renderHealthSummary() {
     </div>
     <div class="health-cell"><span>Éxito · 24 h</span><strong>${successes}/${attempts}</strong><small>${Math.max(0, Number(health.successRate) || 0)}%</small></div>
     <div class="health-cell"><span>Fallos · 24 h</span><strong>${incidents}</strong><small>Ejecuciones no completadas</small></div>
-    <div class="health-cell"><span>Sin recompensa</span><strong>${uncredited}</strong><small>Acciones no acreditadas</small></div>
+    <div class="health-cell latest-execution is-${escapeHtml(latestExecution.status)}"><span>Última ejecución</span><strong>${escapeHtml(latestExecution.label)}</strong><small>${escapeHtml(latestDetail)}</small></div>
   `;
 }
 
 function renderRuns() {
   fields.runs.innerHTML = '';
-  for (const run of state.latestRuns) {
+  for (const run of state.logs.items) {
     const item = document.createElement('article');
     item.className = `run run-${run.status}`;
     item.innerHTML = `
@@ -3180,9 +3224,48 @@ function renderRuns() {
     fields.runs.append(item);
   }
 
-  if (!state.latestRuns.length) {
+  if (!state.logs.items.length) {
     fields.runs.innerHTML = '<p class="muted">Todavía no hay ejecuciones registradas.</p>';
   }
+  fields.logsPage.textContent = `Página ${state.logs.page} de ${state.logs.totalPages}`;
+  fields.logsPrev.disabled = state.logs.page <= 1;
+  fields.logsNext.disabled = state.logs.page >= state.logs.totalPages;
+  fields.downloadVisibleLogs.disabled = !state.logs.items.length;
+}
+
+function downloadVisibleLogs() {
+  if (!state.logs.items.length) return;
+  const exportedAt = new Date();
+  const lines = [
+    'CC Tools - Logs',
+    `Exportados: ${formatDate(exportedAt.toISOString())}`,
+    `Página: ${state.logs.page} de ${state.logs.totalPages}`,
+    ''
+  ];
+
+  for (const run of state.logs.items) {
+    lines.push('='.repeat(72));
+    lines.push(`${taskLabel(run.taskId)} · ${labelStatus(run.status)}`);
+    lines.push(`Fecha: ${formatDate(run.finishedAt || run.createdAt)} · Origen: ${run.source || '-'}`);
+    if (run.scheduledFor) lines.push(`Programada para: ${formatDate(run.scheduledFor)}`);
+    if (run.message) lines.push('', run.message);
+    if (run.details && Object.keys(run.details).length) {
+      lines.push('', 'Datos técnicos:', JSON.stringify(run.details, null, 2));
+    }
+    if (run.screenshots?.length) lines.push('', `Capturas: ${run.screenshots.join(', ')}`);
+    lines.push('');
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const stamp = exportedAt.toISOString().replace(/[:.]/g, '-');
+  link.href = url;
+  link.download = `cc-tools-logs-${stamp}.txt`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function renderDailyCounters() {
@@ -3651,6 +3734,7 @@ function errorMessage(error, payload = {}) {
     FAVORITE_PROFILE_URL_INVALID: 'Introduce una URL válida de un perfil de Creality Cloud.',
     FAVORITE_PROFILE_IS_OWN: 'No puedes añadir tu propio perfil a favoritos.',
     FAVORITE_PROFILE_DUPLICATE: 'Este perfil ya está en favoritos.',
+    FAVORITE_PROFILE_EMPTY: 'Este perfil no tiene diseños publicados y no puede añadirse como favorito.',
     SHOP_ORDER_NOT_ARCHIVABLE: 'Este pedido no se puede archivar todavía.',
     FAVORITE_PROFILE_NOT_FOUND: 'No se pudo encontrar ese perfil en Creality Cloud.',
     FAVORITE_PROFILE_DEFAULT: 'El perfil predeterminado no se puede eliminar.',

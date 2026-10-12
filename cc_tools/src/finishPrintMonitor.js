@@ -4,6 +4,7 @@ import { mergePointsState } from './pointsCounter.js';
 import { appendRun, readConfig, readRuns, writeConfig } from './storage.js';
 import { sendTelegram } from './telegram.js';
 import { finishPrintProfileForPending, normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
+import { pauseForExpiredSession } from './sessionHealth.js';
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const RETRY_INTERVAL_MS = 5 * 60 * 1000;
@@ -43,6 +44,12 @@ export async function recoverStalePendingFinishPrint(now = new Date()) {
 export async function checkPendingFinishPrint() {
   if (checking) return { status: 'busy' };
   const config = await readConfig();
+  if (config.automationHealth?.state === 'paused') {
+    return {
+      status: 'paused',
+      reasonCode: config.automationHealth.reasonCode || ''
+    };
+  }
   const pending = config.tasks.finishPrint.pendingVerification;
   if (!pending?.printId) {
     const runs = await readRuns();
@@ -163,6 +170,21 @@ export async function checkPendingFinishPrint() {
   } catch (error) {
     const freshConfig = await readConfig();
     const current = freshConfig.tasks.finishPrint.pendingVerification;
+    if (error.code === 'LOGIN_REQUIRED') {
+      const sessionEvent = pauseForExpiredSession(freshConfig, 'finishPrint', error.diagnostic || error);
+      if (current?.printId === pending.printId) {
+        current.lastCheckedAt = new Date().toISOString();
+        current.verificationError = 'LOGIN_REQUIRED';
+      }
+      await writeConfig(freshConfig);
+      if (sessionEvent.notificationRequired && freshConfig.telegram.enabled) {
+        await sendTelegram(
+          freshConfig,
+          '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
+        ).catch((notificationError) => console.error('[telegram]', notificationError.message));
+      }
+      return { status: 'paused', error: 'LOGIN_REQUIRED' };
+    }
     if (current?.printId === pending.printId) {
       if (error.code === 'FINISH_PRINT_RECORD_NOT_FOUND') {
         if (current.printRecord?.completed) {

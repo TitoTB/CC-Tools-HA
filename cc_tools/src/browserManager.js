@@ -6,7 +6,8 @@ import { inspectCrealityPage, normalizeCaughtError } from './crealityDiagnostics
 import { isNavigationTimeout, navigateToCrealityPage } from './crealityNavigation.js';
 
 const PROFILE_LOCK_FILES = ['SingletonLock', 'SingletonCookie', 'SingletonSocket', 'lock'];
-const SESSION_CHECK_URL = 'https://www.crealitycloud.com/es';
+const SESSION_CHECK_URL = 'https://www.crealitycloud.com/es/workbench-beta/?type=1';
+const SESSION_PROFILE_API_PATH = '/api/cxy/v3/user/getInfo';
 let activeContext = null;
 let activeMode = '';
 let activeBrowserVersion = '';
@@ -319,6 +320,10 @@ async function closeActiveContext() {
 
 async function assertAuthenticatedSession(context) {
   const page = context.pages()[0] || await context.newPage();
+  const profileResponsePromise = page.waitForResponse(
+    (response) => response.url().includes(SESSION_PROFILE_API_PATH),
+    { timeout: 6000 }
+  ).catch(() => null);
   try {
     await navigateToCrealityPage(page, SESSION_CHECK_URL, {
       timeout: 30000,
@@ -331,6 +336,28 @@ async function assertAuthenticatedSession(context) {
     throw error;
   }
   await page.waitForTimeout(750);
+  const profileResponse = await profileResponsePromise;
+  if (profileResponse) {
+    const payload = await profileResponse.json().catch(() => null);
+    const state = profileSessionState(payload, profileResponse.status());
+    if (state === 'logged_out') {
+      const diagnostic = {
+        code: 'LOGIN_REQUIRED',
+        category: 'session',
+        systemic: true,
+        message: 'La sesión de Creality Cloud ha caducado o no está iniciada.',
+        detectedAt: new Date().toISOString(),
+        url: page.url(),
+        httpStatus: profileResponse.status(),
+        technical: profileSessionTechnical(payload, profileResponse.status())
+      };
+      const error = new Error(diagnostic.message);
+      error.code = diagnostic.code;
+      error.systemic = true;
+      error.diagnostic = diagnostic;
+      throw error;
+    }
+  }
   const diagnostic = await inspectCrealityPage(page, null);
   if (!diagnostic || ![
     'LOGIN_REQUIRED',
@@ -342,6 +369,32 @@ async function assertAuthenticatedSession(context) {
   error.systemic = true;
   error.diagnostic = diagnostic;
   throw error;
+}
+
+export function profileSessionState(payload, httpStatus = 200) {
+  if ([401, 403].includes(Number(httpStatus))) return 'logged_out';
+  if (!payload || typeof payload !== 'object') return 'unknown';
+
+  const base = payload?.result?.profileUserInfo?.base || {};
+  if (base.userId || base.nickName || base.avatar) return 'authenticated';
+
+  const code = Number(payload.code);
+  const message = String(payload.msg || payload.message || '');
+  if (code === 4 || /invalid\s*token|unauthori[sz]ed|not\s+logged|login\s+required|iniciar\s+sesi[oó]n/i.test(message)) {
+    return 'logged_out';
+  }
+  if (code === 0 && Object.hasOwn(payload, 'result')) return 'logged_out';
+  return 'unknown';
+}
+
+function profileSessionTechnical(payload, httpStatus) {
+  const code = payload && typeof payload === 'object' ? payload.code : '';
+  const message = payload && typeof payload === 'object' ? payload.msg || payload.message : '';
+  return [
+    `Consulta de perfil: HTTP ${Number(httpStatus) || 'desconocido'}.`,
+    code !== '' && code !== undefined ? `Código: ${code}.` : '',
+    message ? `Respuesta: ${String(message).slice(0, 200)}.` : ''
+  ].filter(Boolean).join(' ');
 }
 
 export function sessionCheckUnavailableError(error, currentUrl = '') {

@@ -460,6 +460,19 @@ label span {
   margin-bottom: 18px;
 }
 
+.logs-download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.logs-download-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 .panel h2,
 .tool-card h2 {
   margin: 0;
@@ -3462,6 +3475,18 @@ textarea {
   color: var(--bad);
 }
 
+.latest-execution.is-on-time strong {
+  color: var(--ok);
+}
+
+.latest-execution.is-delayed strong {
+  color: #f0a020;
+}
+
+.latest-execution.is-failed strong {
+  color: var(--bad);
+}
+
 .health-resume-button {
   justify-self: start;
   margin-top: 6px;
@@ -3471,6 +3496,7 @@ textarea {
 
 .run {
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-left: 5px solid var(--muted);
   border-radius: 8px;
@@ -3595,6 +3621,7 @@ textarea {
 }
 
 .diagnostic-entry pre {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   max-width: 100%;

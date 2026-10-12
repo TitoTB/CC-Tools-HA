@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildHealthMetrics } from '../src/healthMetrics.js';
+import { buildHealthMetrics, classifyLatestExecution } from '../src/healthMetrics.js';
 
 test('resume la salud de las automatizaciones durante las últimas 24 horas', () => {
   const now = new Date('2026-09-20T12:00:00Z');
@@ -49,6 +49,22 @@ test('una descarga sin recompensa acreditada no cuenta como éxito', () => {
   assert.equal(metrics.attempts, 1);
   assert.equal(metrics.successes, 0);
   assert.equal(metrics.failures, 1);
+});
+
+test('clasifica la última ejecución según resultado y retraso de planificación', () => {
+  assert.equal(classifyLatestExecution({
+    status: 'success',
+    source: 'schedule',
+    scheduledFor: '2026-09-20T10:00:00Z',
+    startedAt: '2026-09-20T10:04:00Z'
+  }).status, 'on-time');
+  assert.equal(classifyLatestExecution({
+    status: 'success',
+    source: 'schedule',
+    scheduledFor: '2026-09-20T10:00:00Z',
+    startedAt: '2026-09-20T10:06:00Z'
+  }).status, 'delayed');
+  assert.equal(classifyLatestExecution({ status: 'error' }).status, 'failed');
 });
 
 function run(status, finishedAt, code = '') {
