@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { profileSessionState } from '../src/browserManager.js';
+import { isCrealityApplicationPage, profileSessionState } from '../src/browserManager.js';
 
 test('reconoce una respuesta autenticada del perfil', () => {
   assert.equal(profileSessionState({
@@ -18,4 +18,11 @@ test('reconoce token inválido y perfil vacío como sesión cerrada', () => {
 test('no confunde una respuesta desconocida con una sesión cerrada', () => {
   assert.equal(profileSessionState(null), 'unknown');
   assert.equal(profileSessionState({ code: 503, msg: 'Unavailable' }), 'unknown');
+});
+
+test('solo revisa una sesión interactiva cuando ya volvió a Creality Cloud', () => {
+  assert.equal(isCrealityApplicationPage('https://www.crealitycloud.com/es'), true);
+  assert.equal(isCrealityApplicationPage('https://www.crealitycloud.com/es/workbench-beta/?type=1'), true);
+  assert.equal(isCrealityApplicationPage('https://id.creality.com/connect'), false);
+  assert.equal(isCrealityApplicationPage('not-a-url'), false);
 });

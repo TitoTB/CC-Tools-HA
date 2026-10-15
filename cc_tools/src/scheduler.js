@@ -26,8 +26,8 @@ import {
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
-import { abortAutomationBrowser } from './browserManager.js';
-import { pauseForExpiredSession } from './sessionHealth.js';
+import { abortAutomationBrowser, verifyPersistedSession } from './browserManager.js';
+import { pauseForExpiredSession, resumeAfterAuthenticatedLogin } from './sessionHealth.js';
 
 const TASK_IDS = [
   'creality',
@@ -425,8 +425,8 @@ async function tick() {
   if (running) return;
 
   const config = await readConfig();
-  if (await refreshScheduledShopOrders(config)) return;
   if (await holdForAutomationHealth(config)) return;
+  if (await refreshScheduledShopOrders(config)) return;
   const runs = await readRuns();
   if (await redeemScheduledShopGoal(config)) return;
   await refreshDailyBoostAvailability(config);
@@ -1335,6 +1335,20 @@ function shouldNotify(config, status) {
 async function holdForAutomationHealth(config) {
   const health = config.automationHealth || {};
   if (health.state !== 'paused') return false;
+  if (health.reasonCode === 'LOGIN_REQUIRED') {
+    try {
+      const verification = await verifyPersistedSession();
+      if (verification.authenticated) {
+        resumeAfterAuthenticatedLogin(config, null, new Date(verification.checkedAt || Date.now()));
+        return false;
+      }
+    } catch (error) {
+      if (!['LOGIN_REQUIRED', 'BROWSER_BUSY', 'SESSION_CHECK_UNAVAILABLE'].includes(error?.code)) {
+        console.warn('[session] No se pudo comprobar la recuperación:', error?.message || String(error));
+      }
+    }
+    return true;
+  }
   const pausedUntil = Date.parse(health.pausedUntil || '');
   if (health.reasonCode === 'CREALITY_SERVICE_UNAVAILABLE'
     && Number.isFinite(pausedUntil)

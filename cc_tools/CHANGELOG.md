@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.31
+
+- Comprueba y sincroniza la sesión de Creality Cloud antes de ejecutar cada tarea.
+- Detecta automáticamente una sesión restablecida y reanuda las automatizaciones sin exigir cerrar manualmente el navegador.
+- Ajusta la posición del indicador LED para integrarlo mejor sobre el avatar.
+- Aclara la opción de notificación cuando un cupón pasa a estar disponible.
+
 ## 1.0.30
 
 - Mejora el indicador de sesión del avatar con un efecto luminoso de tipo LED.

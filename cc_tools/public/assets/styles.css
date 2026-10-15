@@ -317,8 +317,8 @@ label span {
 .creality-session-indicator {
   position: absolute;
   z-index: 2;
-  top: -1px;
-  right: -1px;
+  top: 3px;
+  right: 3px;
   width: 11px;
   height: 11px;
   border-radius: 50%;
