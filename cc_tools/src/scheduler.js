@@ -1400,13 +1400,14 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       : 0;
     const rewardCooldownCount = rewardCooldown ? previousRewardCount + 1 : previousRewardCount;
     const loginRequired = incident.code === 'LOGIN_REQUIRED';
+    if (loginRequired) pauseForExpiredSession(config, taskId, incident, now);
     const durationMs = incidentPauseMilliseconds(incident, now);
     const pauseSource = ['RATE_LIMITED', 'RATE_LIMIT_CONFIRMED'].includes(incident.code)
       && parseRetryAfterMilliseconds(incident.retryAfter, now) !== null
       ? 'retry-after'
       : 'policy';
     config.automationHealth = {
-      ...health,
+      ...(config.automationHealth || health),
       state: 'paused',
       reasonCode: incident.code,
       reason: incident.message,

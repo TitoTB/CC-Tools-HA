@@ -326,6 +326,7 @@ export function printerSessionTargetUrl(knownPrinters = []) {
 
 export function looksLikePrinterLogin({ url = '', text = '' } = {}) {
   return /\/(?:login|sign-in|signin)(?:\/|\?|$)/i.test(String(url))
+    || /^https?:\/\/id\.creality\.com\/connect(?:\/|\?|$)/i.test(String(url))
     || /(?:^|\n)\s*(?:Iniciar sesi[oó]n|Log In|Sign In)\s*(?:\n|$)/i.test(String(text));
 }
 

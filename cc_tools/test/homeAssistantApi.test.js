@@ -58,6 +58,8 @@ test('crea una instantánea estable para Home Assistant', () => {
 
   assert.equal(state.apiVersion, 1);
   assert.equal(state.account.name, 'Aguacatec');
+  assert.equal(state.session.state, 'open');
+  assert.equal(state.session.authenticated, true);
   assert.equal(state.tasks.downloads.dailyCount, 2);
   assert.equal(state.scheduler.runningTask, 'downloads');
   assert.equal(state.scheduler.runningSource, 'schedule');

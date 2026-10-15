@@ -12,6 +12,7 @@ import {
 
 test('distingue una sesión no iniciada de un fallo del Banco de trabajo', () => {
   assert.equal(looksLikePrinterLogin({ url: 'https://www.crealitycloud.com/es/login?redirect=workbench' }), true);
+  assert.equal(looksLikePrinterLogin({ url: 'https://id.creality.com/connect?lang=es-ES' }), true);
   assert.equal(looksLikePrinterLogin({ text: 'Creality Cloud\nIniciar sesión\nCrear cuenta' }), true);
   assert.equal(looksLikePrinterLogin({ text: 'Ender 3\nEn línea\nImprimir desde archivos en la nube' }), false);
 });

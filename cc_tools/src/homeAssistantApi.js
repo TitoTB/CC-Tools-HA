@@ -1,6 +1,7 @@
 import { normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
 import { countCreditedFinishPrintRun, isFinishPrintStartRun } from './finishPrintSelection.js';
 import { createHash } from 'node:crypto';
+import { crealitySessionState } from './sessionHealth.js';
 
 export const HOME_ASSISTANT_API_VERSION = 1;
 
@@ -40,6 +41,7 @@ export function buildHomeAssistantState({
   const latestCheckin = runs.find((run) => run.taskId === 'creality');
   const orders = Array.isArray(config.shopOrders?.items) ? config.shopOrders.items : [];
   const latestOrder = latestShopOrder(orders);
+  const session = crealitySessionState(config);
   const taskStates = Object.fromEntries(EXPOSED_TASKS.map(([publicId, internalId]) => {
     const task = config.tasks?.[internalId] || {};
     return [publicId, {
@@ -66,6 +68,7 @@ export function buildHomeAssistantState({
       timezone,
       configured: config.setup?.assistantCompleted === true
     },
+    session,
     points: {
       total: nullableNumber(config.points?.total),
       earnedToday: Math.max(0, Number(config.points?.earnedToday) || 0),

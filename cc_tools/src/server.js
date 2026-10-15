@@ -255,9 +255,9 @@ app.post('/api/creality/profile/refresh', async (req, res) => {
   try {
     const profile = await readCrealityProfile();
     const config = await readConfig();
-    config.crealityProfile = profile;
+    resumeAfterAuthenticatedLogin(config, profile);
     await writeConfig(config);
-    return res.json({ ok: true, profile });
+    return res.json({ ok: true, profile, session: config.crealitySession });
   } catch (error) {
     if (error.code === 'LOGIN_REQUIRED') await pauseForLoginAndNotify('profileRefresh', error);
     return res.status(409).json({ ok: false, error: error.code || error.message || 'CREALITY_PROFILE_UNAVAILABLE' });
@@ -1257,6 +1257,7 @@ app.post('/api/tasks/creality/login/close', async (req, res) => {
           : 'Sesión confirmada correctamente.'
       },
       profile,
+      session: config.crealitySession,
       resumed
     });
   } catch (error) {

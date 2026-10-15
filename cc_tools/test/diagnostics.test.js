@@ -4,10 +4,16 @@ import { normalizeBrowserError, sessionCheckUnavailableError } from '../src/brow
 import {
   generalizedIncident,
   inspectCrealityPage,
+  isCrealityLoginUrl,
   isModelReviewFailureResponse,
   isSecurityChallengeResponse,
   normalizeCaughtError
 } from '../src/crealityDiagnostics.js';
+
+test('reconoce el centro de cuentas como cierre de sesión', () => {
+  assert.equal(isCrealityLoginUrl('https://id.creality.com/connect?lang=es-ES'), true);
+  assert.equal(isCrealityLoginUrl('https://www.crealitycloud.com/es/model-detail/test'), false);
+});
 
 test('normaliza una excepción nula sin ocultar la fase que falló', () => {
   const error = normalizeCaughtError(null, {

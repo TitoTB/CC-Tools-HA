@@ -137,6 +137,7 @@ test('una sesión cerrada pausa las automatizaciones sin caducidad automática',
   assert.equal(config.automationHealth.reasonCode, 'LOGIN_REQUIRED');
   assert.equal(config.automationHealth.pausedUntil, '');
   assert.equal(config.automationHealth.pauseSource, 'session');
+  assert.equal(config.crealitySession.authenticated, false);
 });
 
 test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilidad temporal', () => {

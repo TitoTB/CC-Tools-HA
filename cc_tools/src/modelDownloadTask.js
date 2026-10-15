@@ -300,7 +300,8 @@ export async function runModelDownloads(taskConfig = {}, options = {}) {
             }
             if (error.actionTrace) {
               const network = analyzeActionTrace(error.actionTrace, 'download_model', error.actionPageDiagnostic || null);
-              if (network.systemic || ['ACTION_REJECTED_HTTP', 'NETWORK_FAILURE'].includes(network.code)) {
+              if (diagnostic.code !== 'LOGIN_REQUIRED'
+                && (network.systemic || ['ACTION_REJECTED_HTTP', 'NETWORK_FAILURE'].includes(network.code))) {
                 diagnostic = {
                   ...diagnostic,
                   code: network.code,

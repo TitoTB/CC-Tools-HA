@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.29
+
+- Muestra sobre el avatar un indicador verde o rojo según el último estado confirmado de la sesión de Creality Cloud.
+- Reconoce la redirección al centro de cuentas de Creality como una sesión cerrada.
+- Evita que los diagnósticos secundarios de descarga oculten una pérdida de sesión.
+- Expone el estado de sesión a la integración de Home Assistant.
+
 ## 1.0.28
 
 - Detecta con mayor fiabilidad una sesión de Creality Cloud caducada y pausa las automatizaciones hasta completar un nuevo inicio de sesión.

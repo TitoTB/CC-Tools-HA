@@ -2,6 +2,11 @@ export function pauseForExpiredSession(config, taskId = '', diagnostic = {}, now
   const health = config.automationHealth || {};
   const alreadyPaused = health.state === 'paused' && health.reasonCode === 'LOGIN_REQUIRED';
   const message = diagnostic.message || 'La sesión de Creality Cloud ha caducado o no está iniciada.';
+  config.crealitySession = {
+    authenticated: false,
+    checkedAt: now.toISOString(),
+    reason: message
+  };
   config.automationHealth = {
     ...health,
     state: 'paused',
@@ -18,6 +23,11 @@ export function pauseForExpiredSession(config, taskId = '', diagnostic = {}, now
 
 export function resumeAfterAuthenticatedLogin(config, profile = null, now = new Date()) {
   if (profile) config.crealityProfile = profile;
+  config.crealitySession = {
+    authenticated: true,
+    checkedAt: now.toISOString(),
+    reason: ''
+  };
   const health = config.automationHealth || {};
   if (health.state !== 'paused' || health.reasonCode !== 'LOGIN_REQUIRED') return false;
 
@@ -36,4 +46,22 @@ export function resumeAfterAuthenticatedLogin(config, profile = null, now = new 
     serviceUnavailableNotified: false
   };
   return true;
+}
+
+export function crealitySessionState(config = {}) {
+  const explicit = config.crealitySession?.authenticated;
+  const closedByHealth = config.automationHealth?.reasonCode === 'LOGIN_REQUIRED';
+  const authenticated = typeof explicit === 'boolean'
+    ? explicit && !closedByHealth
+    : Boolean(config.crealityProfile?.userId) && !closedByHealth;
+  return {
+    authenticated,
+    state: authenticated ? 'open' : 'closed',
+    checkedAt: String(config.crealitySession?.checkedAt || config.automationHealth?.lastIncidentAt || ''),
+    reason: authenticated ? '' : String(
+      config.crealitySession?.reason
+      || (closedByHealth ? config.automationHealth?.reason : '')
+      || ''
+    )
+  };
 }

@@ -374,7 +374,13 @@ async function loginRequired(page) {
   for (const selector of selectors) {
     if (await page.locator(selector).first().isVisible().catch(() => false)) return true;
   }
-  return /\/login(?:\/|\?|$)/i.test(page.url());
+  return isCrealityLoginUrl(page.url());
+}
+
+export function isCrealityLoginUrl(value) {
+  const url = String(value || '');
+  return /\/(?:login|sign-in|signin)(?:\/|\?|$)/i.test(url)
+    || /^https?:\/\/id\.creality\.com\/connect(?:\/|\?|$)/i.test(url);
 }
 
 function diagnostic(code, category, systemic, message, details = {}) {

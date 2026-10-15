@@ -213,6 +213,7 @@ const fields = {
 fields.crealityUserAvatar = $('#creality-user-avatar');
 fields.crealityUserAvatarImage = $('#creality-user-avatar-image');
 fields.crealityUserAvatarFallback = $('#creality-user-avatar-fallback');
+fields.crealitySessionIndicator = $('#creality-session-indicator');
 fields.crealityUserMenu = $('#creality-user-menu');
 fields.crealityProfileLink = $('#creality-profile-link');
 fields.crealityUserAvatarImage.addEventListener('error', () => {
@@ -968,7 +969,9 @@ $('#close-login').addEventListener('click', async () => {
   toast(result.ok ? result.result.message : (result.message || result.error));
   if (result.ok) {
     profileRefreshAttempted = false;
-    await refreshCrealityProfile();
+    state.config.crealityProfile = result.profile || state.config.crealityProfile || {};
+    state.config.crealitySession = result.session || { authenticated: true };
+    await refresh();
   }
 });
 
@@ -1151,6 +1154,7 @@ async function refreshCrealityProfile(browser = { mode: 'idle' }, { force = fals
     return;
   }
   state.config.crealityProfile = result.profile;
+  state.config.crealitySession = result.session || state.config.crealitySession || {};
   renderCrealityProfile(result.profile);
 }
 
@@ -1181,9 +1185,11 @@ async function refreshLiveCounters() {
   state.latestRuns = result.latestRuns || [];
   if (state.logs.page === 1) state.logs.items = state.latestRuns;
   state.config.crealityFavorites = result.config?.crealityFavorites || state.config.crealityFavorites || [];
+  state.config.crealitySession = result.config?.crealitySession || state.config.crealitySession || {};
   renderNextExecutions();
   renderDailyCounters();
   renderFavoriteProfiles(state.config.crealityFavorites);
+  renderCrealityProfile(state.config.crealityProfile || {});
   renderRuns();
   renderHealthSummary();
   if (state.activeView === 'logs') await loadLogs(state.logs.page);
@@ -2827,10 +2833,18 @@ function renderCrealityProfile(profile = {}) {
   const name = String(profile.name || '').trim();
   const avatarUrl = String(profile.avatarUrl || '').trim();
   const userId = String(profile.userId || '').trim();
-  fields.crealityUserAvatar.title = name || 'Usuario de Creality Cloud';
+  const explicitSession = state.config?.crealitySession?.authenticated;
+  const sessionClosedByHealth = state.healthMetrics?.reasonCode === 'LOGIN_REQUIRED';
+  const sessionOpen = typeof explicitSession === 'boolean'
+    ? explicitSession && !sessionClosedByHealth
+    : Boolean(userId) && !sessionClosedByHealth;
+  const sessionLabel = sessionOpen ? 'Abierta' : 'Cerrada';
+  fields.crealitySessionIndicator.classList.toggle('is-open', sessionOpen);
+  fields.crealitySessionIndicator.title = `Sesión: ${sessionLabel}`;
+  fields.crealityUserAvatar.title = `${name || 'Usuario de Creality Cloud'} · Sesión ${sessionLabel.toLocaleLowerCase('es-ES')}`;
   fields.crealityUserAvatar.setAttribute('aria-label', name
-    ? `Usuario de Creality Cloud: ${name}`
-    : 'Usuario de Creality Cloud');
+    ? `Usuario de Creality Cloud: ${name}. Sesión ${sessionLabel.toLocaleLowerCase('es-ES')}`
+    : `Usuario de Creality Cloud. Sesión ${sessionLabel.toLocaleLowerCase('es-ES')}`);
   if (userId) {
     fields.crealityProfileLink.href = `https://www.crealitycloud.com/es/user/${encodeURIComponent(userId)}`;
     fields.crealityProfileLink.removeAttribute('aria-disabled');

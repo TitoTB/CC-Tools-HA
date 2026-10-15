@@ -299,6 +299,7 @@ label span {
 }
 
 .creality-user-avatar {
+  position: relative;
   width: 42px;
   height: 42px;
   min-height: 42px;
@@ -311,6 +312,23 @@ label span {
   padding: 0;
   background: rgba(255, 255, 255, 0.10);
   color: var(--muted);
+}
+
+.creality-session-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #151a20;
+  border-radius: 50%;
+  background: #d33a49;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.38);
+  pointer-events: none;
+}
+
+.creality-session-indicator.is-open {
+  background: #22b455;
 }
 
 .creality-user-avatar:hover,
