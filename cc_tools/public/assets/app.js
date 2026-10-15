@@ -76,6 +76,7 @@ const fields = {
   windowStart: $('#window-start'),
   windowEnd: $('#window-end'),
   sessionTimezone: $('#session-timezone'),
+  sessionAutoLogin: $('#session-auto-login'),
   crealityDailyBadge: $('#creality-daily-badge'),
   finishPrintLastRun: $('#finish-print-last-run'),
   finishPrintNextRun: $('#finish-print-next-run'),
@@ -996,7 +997,8 @@ async function saveConfig(options = {}) {
 
   if (options.includeSession) {
     body.session = {
-      timezone: fields.sessionTimezone.value
+      timezone: fields.sessionTimezone.value,
+      autoLoginEnabled: fields.sessionAutoLogin.checked
     };
   }
 
@@ -2527,6 +2529,7 @@ function render() {
   fields.windowStart.value = checkin.windowStart;
   fields.windowEnd.value = checkin.windowEnd;
   renderTimezoneOptions(state.config.timezone || checkin.timezone || 'Europe/Madrid');
+  fields.sessionAutoLogin.checked = state.config.crealitySession?.autoLoginEnabled === true;
   renderDailyCounters();
 
   renderLastExecution(fields.finishPrintLastRun, finishPrint);

@@ -142,6 +142,61 @@ export async function verifyPersistedSession() {
   return { checked: true, ...(session || {}), authenticated: true };
 }
 
+export async function attemptRememberedSessionLogin() {
+  if (activeMode) {
+    return {
+      attempted: false,
+      authenticated: false,
+      reason: activeMode === 'interactive' ? 'LOGIN_IN_PROGRESS' : 'BROWSER_BUSY'
+    };
+  }
+
+  activeMode = 'automation';
+  try {
+    activeContext = await launchWithRecovery(
+      { ...baseOptions(), headless: true },
+      { allowHeadlessFallback: true }
+    );
+    activeBrowserVersion = activeContext.browser()?.version() || '';
+    watchContext(activeContext);
+    const page = activeContext.pages()[0] || await activeContext.newPage();
+
+    await page.goto(SESSION_CHECK_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    if (isCrealityIdentityPage(page.url())) {
+      await page.waitForURL(
+        (url) => isCrealityApplicationPage(url.toString()),
+        { timeout: 20000, waitUntil: 'domcontentloaded' }
+      ).catch(() => null);
+    }
+
+    if (!isCrealityApplicationPage(page.url())) {
+      return {
+        attempted: true,
+        authenticated: false,
+        reason: 'MANUAL_LOGIN_REQUIRED',
+        url: page.url()
+      };
+    }
+
+    await assertAuthenticatedSession(activeContext, page);
+    const session = await confirmAuthenticatedSession();
+    return { attempted: true, ...session, authenticated: true, url: page.url() };
+  } catch (error) {
+    const normalized = normalizeBrowserError(error);
+    if (normalized?.code === 'LOGIN_REQUIRED') {
+      return {
+        attempted: true,
+        authenticated: false,
+        reason: 'MANUAL_LOGIN_REQUIRED',
+        url: activeContext?.pages?.()[0]?.url?.() || ''
+      };
+    }
+    throw normalized;
+  } finally {
+    await closeActiveContext();
+  }
+}
+
 export function browserManagerState() {
   return {
     mode: activeMode || 'idle',
@@ -398,6 +453,14 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
 export function isCrealityApplicationPage(url) {
   try {
     return new URL(String(url || '')).hostname === 'www.crealitycloud.com';
+  } catch {
+    return false;
+  }
+}
+
+export function isCrealityIdentityPage(url) {
+  try {
+    return new URL(String(url || '')).hostname === 'id.creality.com';
   } catch {
     return false;
   }

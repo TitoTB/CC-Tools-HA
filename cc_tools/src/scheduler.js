@@ -26,8 +26,13 @@ import {
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
-import { abortAutomationBrowser, verifyPersistedSession } from './browserManager.js';
-import { pauseForExpiredSession, resumeAfterAuthenticatedLogin } from './sessionHealth.js';
+import { abortAutomationBrowser, attemptRememberedSessionLogin, verifyPersistedSession } from './browserManager.js';
+import {
+  automaticLoginDue,
+  markAutomaticLoginAttempt,
+  pauseForExpiredSession,
+  resumeAfterAuthenticatedLogin
+} from './sessionHealth.js';
 
 const TASK_IDS = [
   'creality',
@@ -1336,6 +1341,36 @@ async function holdForAutomationHealth(config) {
   const health = config.automationHealth || {};
   if (health.state !== 'paused') return false;
   if (health.reasonCode === 'LOGIN_REQUIRED') {
+    if (automaticLoginDue(config)) {
+      const attemptAt = new Date();
+      markAutomaticLoginAttempt(config, 'attempting', '', attemptAt);
+      await writeConfig(config);
+      try {
+        const automatic = await attemptRememberedSessionLogin();
+        if (automatic.authenticated) {
+          markAutomaticLoginAttempt(config, 'success', 'Sesión recordada restablecida.', attemptAt);
+          resumeAfterAuthenticatedLogin(config, null, new Date(automatic.checkedAt || Date.now()));
+          await writeConfig(config);
+          return false;
+        }
+        markAutomaticLoginAttempt(
+          config,
+          automatic.reason === 'MANUAL_LOGIN_REQUIRED' ? 'manual_required' : 'skipped',
+          automatic.reason === 'MANUAL_LOGIN_REQUIRED'
+            ? 'Creality Cloud requiere completar el inicio de sesión manualmente.'
+            : 'El navegador está siendo utilizado por otra operación.',
+          attemptAt
+        );
+        await writeConfig(config);
+      } catch (error) {
+        markAutomaticLoginAttempt(config, 'error', error?.message || String(error), attemptAt);
+        await writeConfig(config);
+        if (!['BROWSER_BUSY', 'SESSION_CHECK_UNAVAILABLE', 'CREALITY_SERVICE_UNAVAILABLE'].includes(error?.code)) {
+          console.warn('[session] Falló el inicio de sesión automático:', error?.message || String(error));
+        }
+      }
+      return true;
+    }
     try {
       const verification = await verifyPersistedSession();
       if (verification.authenticated) {

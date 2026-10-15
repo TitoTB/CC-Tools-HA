@@ -3,6 +3,7 @@ export function pauseForExpiredSession(config, taskId = '', diagnostic = {}, now
   const alreadyPaused = health.state === 'paused' && health.reasonCode === 'LOGIN_REQUIRED';
   const message = diagnostic.message || 'La sesión de Creality Cloud ha caducado o no está iniciada.';
   config.crealitySession = {
+    ...(config.crealitySession || {}),
     authenticated: false,
     checkedAt: now.toISOString(),
     reason: message
@@ -24,6 +25,7 @@ export function pauseForExpiredSession(config, taskId = '', diagnostic = {}, now
 export function resumeAfterAuthenticatedLogin(config, profile = null, now = new Date()) {
   if (profile) config.crealityProfile = profile;
   config.crealitySession = {
+    ...(config.crealitySession || {}),
     authenticated: true,
     checkedAt: now.toISOString(),
     reason: ''
@@ -46,6 +48,25 @@ export function resumeAfterAuthenticatedLogin(config, profile = null, now = new 
     serviceUnavailableNotified: false
   };
   return true;
+}
+
+export function automaticLoginDue(config = {}, now = new Date(), retryMs = 30 * 60 * 1000) {
+  const session = config.crealitySession || {};
+  if (session.autoLoginEnabled !== true) return false;
+  const attemptedAt = Date.parse(session.autoLoginLastAttemptAt || '');
+  return !Number.isFinite(attemptedAt) || now.getTime() - attemptedAt >= retryMs;
+}
+
+export function markAutomaticLoginAttempt(config, status = 'attempting', message = '', now = new Date()) {
+  config.crealitySession = {
+    ...(config.crealitySession || {}),
+    autoLoginLastAttemptAt: status === 'attempting'
+      ? now.toISOString()
+      : String(config.crealitySession?.autoLoginLastAttemptAt || now.toISOString()),
+    autoLoginLastStatus: String(status || ''),
+    autoLoginLastMessage: String(message || '')
+  };
+  return config.crealitySession;
 }
 
 export function crealitySessionState(config = {}) {

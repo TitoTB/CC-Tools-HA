@@ -212,6 +212,23 @@ label span {
   font-size: 0.76rem;
 }
 
+.session-auto-login-option {
+  margin-top: 18px;
+  align-items: flex-start;
+}
+
+.session-auto-login-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.session-auto-login-option small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .session-save-button {
   display: inline-flex;
   align-items: center;
@@ -317,8 +334,8 @@ label span {
 .creality-session-indicator {
   position: absolute;
   z-index: 2;
-  top: 3px;
-  right: 3px;
+  top: 2px;
+  right: 2px;
   width: 11px;
   height: 11px;
   border-radius: 50%;

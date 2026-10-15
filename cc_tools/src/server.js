@@ -760,6 +760,10 @@ app.patch('/api/config', async (req, res) => {
     }
     timezoneChanged = timezone !== config.timezone;
     config.timezone = timezone;
+    config.crealitySession = {
+      ...(config.crealitySession || {}),
+      autoLoginEnabled: input.session.autoLoginEnabled === true
+    };
     for (const task of Object.values(config.tasks)) {
       task.timezone = timezone;
     }

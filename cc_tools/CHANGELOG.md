@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.32
+
+- Añade la opción "Inicio de sesión automático" en Ajustes > Sesión > Creality Cloud.
+- Recupera una sesión cerrada usando exclusivamente los datos que ya recuerda el perfil persistente del navegador.
+- Mantiene las automatizaciones pausadas cuando Creality Cloud exige completar el acceso manualmente.
+- Limita los intentos automáticos fallidos a uno cada 30 minutos para evitar bucles.
+- Mueve el indicador LED de sesión un píxel hacia arriba y hacia la derecha.
+
 ## 1.0.31
 
 - Comprueba y sincroniza la sesión de Creality Cloud antes de ejecutar cada tarea.

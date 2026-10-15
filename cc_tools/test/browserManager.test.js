@@ -1,12 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isCrealityApplicationPage, profileSessionState } from '../src/browserManager.js';
+import { isCrealityApplicationPage, isCrealityIdentityPage, profileSessionState } from '../src/browserManager.js';
 
 test('reconoce una respuesta autenticada del perfil', () => {
   assert.equal(profileSessionState({
     code: 0,
     result: { profileUserInfo: { base: { userId: '123', nickName: 'Aguacatec' } } }
   }), 'authenticated');
+});
+
+test('distingue la página de identidad usada para recuperar la sesión', () => {
+  assert.equal(isCrealityIdentityPage('https://id.creality.com/connect?client_id=creality_cloud'), true);
+  assert.equal(isCrealityIdentityPage('https://www.crealitycloud.com/es'), false);
+  assert.equal(isCrealityIdentityPage('not-a-url'), false);
 });
 
 test('reconoce token inválido y perfil vacío como sesión cerrada', () => {

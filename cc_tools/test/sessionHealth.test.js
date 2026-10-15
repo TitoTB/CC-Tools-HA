@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { crealitySessionState, pauseForExpiredSession, resumeAfterAuthenticatedLogin } from '../src/sessionHealth.js';
+import {
+  automaticLoginDue,
+  crealitySessionState,
+  markAutomaticLoginAttempt,
+  pauseForExpiredSession,
+  resumeAfterAuthenticatedLogin
+} from '../src/sessionHealth.js';
 
 test('pausa una sola vez hasta que se confirme un nuevo login', () => {
   const config = { automationHealth: { state: 'active' }, crealityProfile: {} };
@@ -20,4 +26,22 @@ test('pausa una sola vez hasta que se confirme un nuevo login', () => {
   assert.equal(config.automationHealth.state, 'active');
   assert.equal(config.crealityProfile.name, 'Aguacatec');
   assert.deepEqual(crealitySessionState(config).state, 'open');
+});
+
+test('limita los reintentos automáticos y conserva la preferencia al cambiar de estado', () => {
+  const config = {
+    automationHealth: { state: 'active' },
+    crealitySession: { autoLoginEnabled: true }
+  };
+  const now = new Date('2026-10-15T08:00:00.000Z');
+
+  assert.equal(automaticLoginDue(config, now), true);
+  markAutomaticLoginAttempt(config, 'attempting', '', now);
+  assert.equal(automaticLoginDue(config, new Date('2026-10-15T08:29:59.000Z')), false);
+  assert.equal(automaticLoginDue(config, new Date('2026-10-15T08:30:00.000Z')), true);
+
+  pauseForExpiredSession(config, 'creality', {}, now);
+  assert.equal(config.crealitySession.autoLoginEnabled, true);
+  resumeAfterAuthenticatedLogin(config, null, now);
+  assert.equal(config.crealitySession.autoLoginEnabled, true);
 });
