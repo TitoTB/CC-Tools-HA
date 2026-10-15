@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.30
+
+- Mejora el indicador de sesión del avatar con un efecto luminoso de tipo LED.
+- Sitúa el indicador sobre el contenedor del avatar para evitar que el borde o el resplandor queden recortados.
+
 ## 1.0.29
 
 - Muestra sobre el avatar un indicador verde o rojo según el último estado confirmado de la sesión de Creality Cloud.

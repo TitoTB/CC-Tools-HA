@@ -316,19 +316,26 @@ label span {
 
 .creality-session-indicator {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 10px;
-  height: 10px;
-  border: 2px solid #151a20;
+  z-index: 2;
+  top: -1px;
+  right: -1px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
-  background: #d33a49;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.38);
+  background: #ff4057;
+  box-shadow:
+    0 0 4px rgba(255, 64, 87, 0.95),
+    0 0 9px rgba(255, 64, 87, 0.72),
+    inset 0 1px 1px rgba(255, 255, 255, 0.8);
   pointer-events: none;
 }
 
 .creality-session-indicator.is-open {
-  background: #22b455;
+  background: #2ee86b;
+  box-shadow:
+    0 0 4px rgba(46, 232, 107, 0.98),
+    0 0 9px rgba(46, 232, 107, 0.75),
+    inset 0 1px 1px rgba(255, 255, 255, 0.8);
 }
 
 .creality-user-avatar:hover,
