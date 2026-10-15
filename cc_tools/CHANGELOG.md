@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.33
+
+- Unifica el valor "Puntos obtenidos hoy" de Home Assistant con el badge de CC Tools.
+- Suma únicamente los movimientos positivos del día y evita que los gastos reduzcan los puntos obtenidos.
+
 ## 1.0.32
 
 - Añade la opción "Inicio de sesión automático" en Ajustes > Sesión > Creality Cloud.

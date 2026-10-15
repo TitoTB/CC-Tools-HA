@@ -2,6 +2,7 @@ import { normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
 import { countCreditedFinishPrintRun, isFinishPrintStartRun } from './finishPrintSelection.js';
 import { createHash } from 'node:crypto';
 import { crealitySessionState } from './sessionHealth.js';
+import { localDateKey } from './pointsCounter.js';
 
 export const HOME_ASSISTANT_API_VERSION = 1;
 
@@ -71,7 +72,7 @@ export function buildHomeAssistantState({
     session,
     points: {
       total: nullableNumber(config.points?.total),
-      earnedToday: Math.max(0, Number(config.points?.earnedToday) || 0),
+      earnedToday: earnedPointsToday(config.points, timezone),
       status: String(config.points?.status || 'unavailable'),
       updatedAt: String(config.points?.updatedAt || config.points?.checkedAt || '')
     },
@@ -108,6 +109,13 @@ export function buildHomeAssistantState({
     tasks: taskStates,
     printers: buildPrinterStates(config.tasks?.finishPrint || {}, runs, timezone)
   };
+}
+
+export function earnedPointsToday(points = {}, timezone = 'Europe/Madrid', now = new Date()) {
+  const today = localDateKey(now, timezone);
+  return (Array.isArray(points.transactions) ? points.transactions : [])
+    .filter((transaction) => transaction?.date === today && Number(transaction?.amount) > 0)
+    .reduce((total, transaction) => total + Number(transaction.amount), 0);
 }
 
 function homeAssistantSchedule(schedule) {

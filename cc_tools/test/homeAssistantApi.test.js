@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildHomeAssistantEvents,
   buildHomeAssistantState,
+  earnedPointsToday,
   internalTaskId
 } from '../src/homeAssistantApi.js';
 
@@ -116,6 +117,22 @@ test('traduce identificadores públicos de tareas', () => {
   assert.equal(internalTaskId('checkin'), 'creality');
   assert.equal(internalTaskId('likes'), 'modelLikes');
   assert.equal(internalTaskId('unknown'), '');
+});
+
+test('expone los mismos puntos positivos del día que el badge de CC Tools', () => {
+  const points = {
+    earnedToday: 60,
+    transactions: [
+      { date: '2026-10-15', amount: 100 },
+      { date: '2026-10-15', amount: -40 },
+      { date: '2026-10-14', amount: 25 }
+    ]
+  };
+
+  assert.equal(
+    earnedPointsToday(points, 'Europe/Madrid', new Date('2026-10-15T12:00:00.000Z')),
+    100
+  );
 });
 
 function fixtureConfig() {
