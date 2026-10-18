@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.35
+
+- Mantiene el límite de un boost diario únicamente para las ejecuciones programadas.
+- Permite aplicar manualmente varios boosts el mismo día mientras queden boletos disponibles.
+- Comprueba el límite automático antes de abrir Chromium y evita búsquedas innecesarias de modelos.
+- Limita cada búsqueda a tres candidatos rotativos y registra los modelos revisados y sus rechazos cuando no se puede aplicar el boost.
+
 ## 1.0.34
 
 - Sustituye el enlace "Ver histórico" del seguimiento de pedidos por un botón con icono.

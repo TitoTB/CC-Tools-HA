@@ -19,6 +19,7 @@ const BOOST_PERMISSION_PATH = '/api/cxy/v2/boost/checkPermission';
 const BOOST_URL = 'https://www.crealitycloud.com/api/cxy/v2/boost/boost';
 const GREEN_CONTENT_URL = 'https://www.crealitycloud.com/api/cxy/v2/green/content';
 const COMMENT_URL = 'https://www.crealitycloud.com/api/cxy/comment/postComment';
+const MAX_BOOST_CANDIDATES_PER_RUN = 3;
 
 export async function runModelBoost(taskConfig = {}) {
   const designs = selectBoostCandidates(
@@ -31,6 +32,14 @@ export async function runModelBoost(taskConfig = {}) {
   const runs = await readRuns();
   const alreadyUsedToday = boostConsumedToday(runs, taskConfig.timezone)
     || designs.some((design) => isToday(design.boostLastAt, taskConfig.timezone));
+  const executionSource = taskConfig.executionSource === 'manual' ? 'manual' : 'schedule';
+  if (shouldSkipBoostForDailyPreference(alreadyUsedToday, executionSource)) {
+    return skipped('El boost diario programado ya se ha utilizado.', {
+      alreadyUsedToday: true,
+      executionSource
+    });
+  }
+  const candidates = boostCandidatesForRun(designs, runs, taskConfig.timezone);
 
   return withAutomationBrowser({}, async (context) => {
     const page = context.pages()[0] || await context.newPage();
@@ -44,12 +53,23 @@ export async function runModelBoost(taskConfig = {}) {
       let resolved = null;
       let ownModelsSkipped = 0;
       let rejectedModels = 0;
+      let unresolvedModels = 0;
       const permissionRejections = [];
-      for (const candidate of designs) {
+      const attemptedModels = [];
+      for (const candidate of candidates) {
         design = candidate;
+        attemptedModels.push({
+          designId: candidate.id || '',
+          title: candidate.title || '',
+          url: candidate.url || ''
+        });
         const target = await resolveBoostTarget(page, candidate, observer, taskConfig.ownUserId);
         if (target?.ownModel) {
           ownModelsSkipped += 1;
+          continue;
+        }
+        if (!target) {
+          unresolvedModels += 1;
           continue;
         }
         if (target && !availabilityKnown) {
@@ -58,17 +78,9 @@ export async function runModelBoost(taskConfig = {}) {
           availabilityKnown = true;
         }
         const disposition = target ? boostAttemptDisposition({
-          alreadyUsedToday,
           ticketsAvailable,
           permissionAccepted: boostResponseAccepted(target.permission)
         }) : '';
-        if (disposition === 'already_used') {
-          return skipped('El boost diario ya se ha utilizado.', {
-            alreadyUsedToday: true,
-            ticketsAvailable,
-            availabilityCheckedAt: new Date().toISOString()
-          });
-        }
         if (disposition === 'no_tickets') {
           return skipped('No hay boletos boost disponibles.', {
             ticketsAvailable: 0,
@@ -88,13 +100,32 @@ export async function runModelBoost(taskConfig = {}) {
         resolved = target;
         if (resolved) break;
       }
-      if (!resolved && rejectedModels) {
-        const error = taskError('BOOST_NOT_ALLOWED', 'Creality Cloud no permite impulsar ninguno de los diseños disponibles.');
-        error.technical = JSON.stringify({ ticketsAvailable, rejectedModels, permissionRejections });
+      const attemptDetails = {
+        executionSource,
+        totalCandidates: designs.length,
+        candidateLimit: MAX_BOOST_CANDIDATES_PER_RUN,
+        attemptedModels,
+        ownModelsSkipped,
+        rejectedModels,
+        unresolvedModels,
+        permissionRejections
+      };
+      if (!resolved && rejectedModels === attemptedModels.length) {
+        const error = taskError('BOOST_NOT_ALLOWED', 'Creality Cloud no permite impulsar ninguno de los diseños revisados.');
+        error.technical = JSON.stringify({ ticketsAvailable, ...attemptDetails });
         throw error;
       }
-      if (!resolved && ownModelsSkipped) return skipped('Los diseños disponibles pertenecen al usuario conectado y se han omitido.');
-      if (!resolved) throw taskError('BOOST_TARGET_NOT_FOUND', 'No se pudo identificar un diseño apto para recibir el boost.');
+      if (!resolved && ownModelsSkipped === attemptedModels.length) {
+        return skipped('Los diseños disponibles pertenecen al usuario conectado y se han omitido.');
+      }
+      if (!resolved) {
+        const error = taskError(
+          'BOOST_TARGET_NOT_FOUND',
+          `No se pudo preparar un diseño para recibir el boost tras revisar ${attemptedModels.length} modelo${attemptedModels.length === 1 ? '' : 's'}.`
+        );
+        error.technical = JSON.stringify(attemptDetails);
+        throw error;
+      }
 
       const { modelGroupId, authenticationHeaders } = resolved;
 
@@ -280,6 +311,27 @@ export function boostConsumedToday(runs = [], timezone = 'Europe/Madrid', now = 
     && dayKey(timezone, new Date(run.finishedAt || run.createdAt)) === today);
 }
 
+export function shouldSkipBoostForDailyPreference(alreadyUsedToday, executionSource = 'schedule') {
+  return executionSource !== 'manual' && alreadyUsedToday === true;
+}
+
+export function boostCandidatesForRun(
+  designs = [],
+  runs = [],
+  timezone = 'Europe/Madrid',
+  now = new Date(),
+  limit = MAX_BOOST_CANDIDATES_PER_RUN
+) {
+  if (!designs.length) return [];
+  const failedAttemptsToday = runs.filter((run) => run.taskId === 'modelBoosts'
+    && run.details?.boostConsumed !== true
+    && ['error', 'failed'].includes(run.status)
+    && dayKey(timezone, new Date(run.finishedAt || run.createdAt)) === dayKey(timezone, now)).length;
+  const offset = failedAttemptsToday % designs.length;
+  const rotated = [...designs.slice(offset), ...designs.slice(0, offset)];
+  return rotated.slice(0, Math.max(1, Number(limit) || MAX_BOOST_CANDIDATES_PER_RUN));
+}
+
 async function resolveBoostTarget(page, design, observer, ownUserId = '') {
   await page.goto(design.url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3000);
@@ -347,11 +399,9 @@ export function boostResponseAccepted(response) {
 }
 
 export function boostAttemptDisposition({
-  alreadyUsedToday = false,
   ticketsAvailable = 0,
   permissionAccepted = false
 } = {}) {
-  if (alreadyUsedToday) return 'already_used';
   if (Math.max(0, Number(ticketsAvailable) || 0) <= 0) return 'no_tickets';
   return permissionAccepted ? 'allowed' : 'not_allowed';
 }

@@ -95,7 +95,7 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
       await writeConfig(config);
     }
     const result = await executeWithTimeout(
-      executeTask(taskId, taskConfig, options, config),
+      executeTask(taskId, taskConfig, { ...options, executionSource: source }, config),
       {
         timeoutMs,
         taskId,
@@ -1131,7 +1131,13 @@ function executeTask(taskId, taskConfig, options, config) {
   }
   if (taskId === 'modelDownloads') return runModelDownloads(taskConfig, ownershipOptions);
   if (taskId === 'comments') return runModelComment(taskConfig, ownershipOptions);
-  if (taskId === 'modelBoosts') return runModelBoost({ ...taskConfig, ownUserId: ownershipOptions.ownUserId });
+  if (taskId === 'modelBoosts') {
+    return runModelBoost({
+      ...taskConfig,
+      ownUserId: ownershipOptions.ownUserId,
+      executionSource: options.executionSource
+    });
+  }
   if (taskId === 'modelLikes') return runModelAction('like_model', taskConfig, ownershipOptions);
   throw new Error(`Tarea desconocida: ${taskId}`);
 }

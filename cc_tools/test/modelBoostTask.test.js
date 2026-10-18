@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   boostAttemptDisposition,
+  boostCandidatesForRun,
   boostConsumedToday,
   boostResponseAccepted,
   selectBoostCandidates,
+  shouldSkipBoostForDailyPreference,
   verifyBoostLottery
 } from '../src/modelBoostTask.js';
 
@@ -49,6 +51,27 @@ test('considera utilizado el boost aunque falle la verificación posterior', () 
 
   assert.equal(boostConsumedToday(runs, 'Europe/Madrid', new Date('2026-09-23T12:00:00.000Z')), true);
   assert.equal(boostConsumedToday(runs, 'Europe/Madrid', new Date('2026-09-24T12:00:00.000Z')), false);
+});
+
+test('limita el boost diario solo en ejecuciones programadas', () => {
+  assert.equal(shouldSkipBoostForDailyPreference(true, 'schedule'), true);
+  assert.equal(shouldSkipBoostForDailyPreference(true, 'manual'), false);
+  assert.equal(shouldSkipBoostForDailyPreference(false, 'schedule'), false);
+});
+
+test('limita los candidatos y rota después de un intento fallido', () => {
+  const designs = ['a', 'b', 'c', 'd'].map((id) => ({ id }));
+  const runs = [{
+    taskId: 'modelBoosts',
+    status: 'error',
+    finishedAt: '2026-10-18T08:00:00.000Z',
+    details: { boostConsumed: false }
+  }];
+
+  assert.deepEqual(
+    boostCandidatesForRun(designs, runs, 'Europe/Madrid', new Date('2026-10-18T10:00:00.000Z')).map((item) => item.id),
+    ['b', 'c', 'd']
+  );
 });
 
 test('verifica el boost por la lotería y no por el saldo de puntos', () => {
