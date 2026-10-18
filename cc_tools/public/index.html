@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CC Tools</title>
     <link rel="icon" type="image/png" href="/assets/app-icon.png">
-    <link rel="stylesheet" href="/assets/styles.css?v=20260930-01">
+    <link rel="stylesheet" href="/assets/styles.css?v=20261018-01">
   </head>
   <body>
     <header class="topbar">
@@ -989,7 +989,14 @@
         <section class="points-shop-orders">
           <div class="points-shop-orders-header">
             <h3>Seguimiento de pedidos</h3>
-            <a href="https://www.crealitycloud.com/es/shop-center/orders" target="_blank" rel="noopener noreferrer">Ver histórico</a>
+            <div class="points-shop-orders-actions">
+              <a class="points-shop-orders-action" href="https://www.crealitycloud.com/es/shop-center/orders" target="_blank" rel="noopener noreferrer" title="Abrir histórico de pedidos" aria-label="Abrir histórico de pedidos">
+                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155.5 85.5 203.9 64 257.3 64C363 64 448 149.8 448 256s-85.8 192-192 192c-48.8 0-93.3-18.2-127.2-48.2c-9.9-8.8-25.1-7.9-33.9 2s-7.9 25.1 2 33.9C139.4 473.4 195.2 496 256 496c132.5 0 240-107.5 240-240S388.5 16 256 16C185.3 16 121.7 46.6 75 95.3V75zm205 69c0-13.3-10.7-24-24-24s-24 10.7-24 24V256c0 8 4 15.5 10.7 20l80 56c10.9 7.6 25.8 5 33.4-5.9s5-25.8-5.9-33.4L280 243.5V144z"/></svg>
+              </a>
+              <button id="refresh-shop-orders" class="points-shop-orders-action" type="button" title="Actualizar pedidos" aria-label="Actualizar pedidos">
+                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M105.1 202.6c7.7-21.8 20.2-42.3 37.8-59.8c62.5-62.5 163.8-62.5 226.3 0L386.3 160H352c-17.7 0-32 14.3-32 32s14.3 32 32 32H463.5c17.7 0 32-14.3 32-32V80c0-17.7-14.3-32-32-32s-32 14.3-32 32v35.2L414.4 97.6c-87.5-87.5-229.3-87.5-316.8 0C73.2 122 55.6 150.7 44.8 181.4c-5.9 16.7 2.9 34.9 19.5 40.8s34.9-2.9 40.8-19.6zM39 289.3c-5 1.5-9.8 4.2-13.7 8.2c-4 4-6.7 8.8-8.1 14c-.8 2.9-1.2 5.9-1.2 8.9V432c0 17.7 14.3 32 32 32s32-14.3 32-32V396.9l17.6 17.5c87.5 87.4 229.3 87.4 316.7 0c24.4-24.4 42.1-53.1 52.9-83.8c5.9-16.7-2.9-34.9-19.5-40.8s-34.9 2.9-40.8 19.5c-7.7 21.8-20.2 42.3-37.8 59.8c-62.5 62.5-163.8 62.5-226.3 0L125.6 352H160c17.7 0 32-14.3 32-32s-14.3-32-32-32H48.4c-3.2 0-6.4 .5-9.4 1.3z"/></svg>
+              </button>
+            </div>
           </div>
           <div id="points-shop-orders-list" class="points-shop-orders-list" aria-live="polite"></div>
         </section>
@@ -997,6 +1004,6 @@
     </div>
 
     <div id="toast" class="toast" hidden></div>
-    <script src="/assets/app.js?v=20260930-02" type="module"></script>
+    <script src="/assets/app.js?v=20261018-01" type="module"></script>
   </body>
 </html>

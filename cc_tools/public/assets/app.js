@@ -188,6 +188,7 @@ const fields = {
   pointsShopProductPreview: $('#points-shop-product-preview'),
   pointsShopGoalStatus: $('#points-shop-goal-status'),
   pointsShopOrdersList: $('#points-shop-orders-list'),
+  refreshShopOrders: $('#refresh-shop-orders'),
   programPointsShopGoal: $('#program-points-shop-goal'),
   favoriteProfileUrl: $('#favorite-profile-url'),
   favoriteProfilesList: $('#favorite-profiles-list'),
@@ -398,6 +399,10 @@ fields.pointsShopOrdersList.addEventListener('click', async (event) => {
   toast('Pedido archivado.');
 });
 
+fields.refreshShopOrders.addEventListener('click', () => {
+  refreshShopOrders({ force: true, announce: true });
+});
+
 async function openPointsHistory() {
   fields.pointsHistoryModal.hidden = false;
   renderPointsHistory(state.config?.points || {});
@@ -406,17 +411,34 @@ async function openPointsHistory() {
   refreshShopOrders().catch(() => {});
 }
 
-async function refreshShopOrders() {
-  if (state.shopOrdersLoading) return;
+async function refreshShopOrders({ force = false, announce = false } = {}) {
+  if (state.shopOrdersLoading) {
+    if (announce) toast('Ya se están actualizando los pedidos.');
+    return false;
+  }
   state.shopOrdersLoading = true;
+  fields.refreshShopOrders.disabled = true;
+  fields.refreshShopOrders.classList.add('is-loading');
   try {
-    const result = await api('/api/shop/orders/refresh', { method: 'POST' });
+    const endpoint = `/api/shop/orders/refresh${force ? '?force=1' : ''}`;
+    const result = await api(endpoint, { method: 'POST' });
     if (result.orders) {
       state.config.shopOrders = result.orders;
       renderShopOrders(result.orders);
     }
+    if (!result.ok) {
+      if (announce) toast(errorMessage(result.error, result));
+      return false;
+    }
+    if (announce) toast('Pedidos actualizados.');
+    return true;
+  } catch (error) {
+    if (announce) toast('No se pudieron actualizar los pedidos.');
+    return false;
   } finally {
     state.shopOrdersLoading = false;
+    fields.refreshShopOrders.disabled = false;
+    fields.refreshShopOrders.classList.remove('is-loading');
   }
 }
 

@@ -178,9 +178,10 @@ app.get('/api/shop/catalog', async (req, res) => {
   }
 });
 
-app.post('/api/shop/orders/refresh', async (_req, res) => {
+app.post('/api/shop/orders/refresh', async (req, res) => {
   const config = await readConfig();
-  if (!shopOrdersRefreshDue(config.shopOrders)) {
+  const force = req.query.force === '1';
+  if (!force && !shopOrdersRefreshDue(config.shopOrders)) {
     return res.json({ ok: true, orders: config.shopOrders, refreshed: false });
   }
   try {

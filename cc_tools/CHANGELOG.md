@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.34
+
+- Sustituye el enlace "Ver histórico" del seguimiento de pedidos por un botón con icono.
+- Añade un botón para consultar manualmente los pedidos sin esperar a la actualización automática de 24 horas.
+- Muestra el estado de la consulta manual y conserva los pedidos conocidos cuando Creality Cloud no responde.
+
 ## 1.0.33
 
 - Unifica el valor "Puntos obtenidos hoy" de Home Assistant con el badge de CC Tools.
