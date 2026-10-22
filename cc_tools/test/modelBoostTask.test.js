@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BOOST_BUTTON_LABEL_PATTERN,
   boostAttemptDisposition,
   boostCandidatesForRun,
   boostConsumedToday,
@@ -9,6 +10,15 @@ import {
   shouldSkipBoostForDailyPreference,
   verifyBoostLottery
 } from '../src/modelBoostTask.js';
+
+test('reconoce botones para aplicar y repetir un boost sin confundir insignias', () => {
+  for (const label of ['Impulso', 'Impulsar', 'Impulsar de nuevo', 'Impulsar nuevamente', 'Volver a impulsar', 'Boost', 'Boost again']) {
+    assert.match(label, BOOST_BUTTON_LABEL_PATTERN);
+  }
+  for (const label of ['Potenciado', 'Boost disponible', '2 Boosts', 'Comentario Boost']) {
+    assert.doesNotMatch(label, BOOST_BUTTON_LABEL_PATTERN);
+  }
+});
 
 test('selecciona solo diseños favoritos activos en rondas del menos impulsado al más impulsado', () => {
   const candidates = selectBoostCandidates([

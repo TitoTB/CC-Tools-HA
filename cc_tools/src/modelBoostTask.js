@@ -20,6 +20,7 @@ const BOOST_URL = 'https://www.crealitycloud.com/api/cxy/v2/boost/boost';
 const GREEN_CONTENT_URL = 'https://www.crealitycloud.com/api/cxy/v2/green/content';
 const COMMENT_URL = 'https://www.crealitycloud.com/api/cxy/comment/postComment';
 const MAX_BOOST_CANDIDATES_PER_RUN = 3;
+export const BOOST_BUTTON_LABEL_PATTERN = /^(?:Impulso|Impulsar(?: de nuevo| nuevamente)?|Volver a impulsar|Boost(?: again)?|Boost it again)$/i;
 
 export async function runModelBoost(taskConfig = {}) {
   const designs = selectBoostCandidates(
@@ -349,7 +350,7 @@ async function resolveBoostTarget(page, design, observer, ownUserId = '') {
     response.request().method() === 'POST' && response.url().includes(BOOST_PERMISSION_PATH),
   { timeout: 12000 }).catch(() => null);
 
-  const button = page.getByText(/^(Impulso|Boost)$/i, { exact: true }).last();
+  const button = page.getByText(BOOST_BUTTON_LABEL_PATTERN, { exact: true }).last();
   if (!await button.isVisible().catch(() => false)) return null;
   await button.click({ timeout: 6000 });
 

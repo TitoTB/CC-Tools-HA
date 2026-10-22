@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.36
+
+- Reconoce el botón "Impulsar de nuevo" de Creality Cloud en diseños que ya habían recibido un boost.
+- Evita descartar modelos válidos y devolver `BOOST_TARGET_NOT_FOUND` cuando todavía quedan boosts disponibles.
+
 ## 1.0.35
 
 - Mantiene el límite de un boost diario únicamente para las ejecuciones programadas.
