@@ -18,11 +18,11 @@ test('la planificación de descargas nunca salta al día siguiente', () => {
   assert.equal(generated.nextRunAt, '');
 });
 
-test('la planificación conserva al menos el intervalo y tiempo de ejecución', () => {
+test('la planificación limita a diez diseños y conserva el intervalo y tiempo de ejecución', () => {
   const now = new Date(2026, 8, 21, 7, 0, 0);
   const generated = generateDownloadPlan(task, now, { remainingCount: 30 });
 
-  assert.equal(generated.plan.length, 30);
+  assert.equal(generated.plan.length, 10);
   for (let index = 1; index < generated.plan.length; index += 1) {
     const gap = new Date(generated.plan[index]).getTime() - new Date(generated.plan[index - 1]).getTime();
     assert.ok(gap >= 22 * 60 * 1000);

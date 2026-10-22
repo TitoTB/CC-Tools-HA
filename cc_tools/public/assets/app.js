@@ -2562,7 +2562,7 @@ function render() {
   fields.modelsEnabled.checked = models.enabled;
   fields.modelsWindowStart.value = models.windowStart;
   fields.modelsWindowEnd.value = models.windowEnd;
-  fields.modelsDailyLimit.value = models.dailyLimit;
+  fields.modelsDailyLimit.value = Math.max(0, Math.min(10, Number(models.dailyLimit) || 0));
   fields.modelsMinInterval.value = Math.max(10, Number(models.minIntervalMinutes) || 10);
   fields.modelsDownloadsPath.value = state.runtimePaths.downloads || 'data/temp-downloads';
   fields.modelsCleanupHours.value = Math.min(168, Math.max(1, Number(models.cleanupAfterHours) || 1));
@@ -3326,7 +3326,7 @@ function renderDailyBadge(node, count, max) {
 }
 
 function requiredModelWindowMinutes() {
-  const dailyLimit = Math.max(0, Math.min(30, Number(fields.modelsDailyLimit.value) || 0));
+  const dailyLimit = Math.max(0, Math.min(10, Number(fields.modelsDailyLimit.value) || 0));
   const minIntervalMinutes = Math.max(10, Number(fields.modelsMinInterval.value) || 10);
   return dailyLimit * (minIntervalMinutes + 2);
 }

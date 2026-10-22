@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.37
+
+- Limita a diez el número máximo de diseños que se pueden descubrir cada día.
+- Aplica el mismo límite en la interfaz, la planificación, la ejecución y la validación del servidor.
+- Ajusta automáticamente a diez las configuraciones anteriores que tuvieran un valor superior.
+
 ## 1.0.36
 
 - Reconoce el botón "Impulsar de nuevo" de Creality Cloud en diseños que ya habían recibido un boost.

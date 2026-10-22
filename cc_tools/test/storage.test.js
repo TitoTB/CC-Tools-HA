@@ -67,9 +67,20 @@ test('añade la configuración inicial de Enviar una impresión', async () => {
 test('activa por defecto la prioridad de favoritos y todo el catálogo', async () => {
   const config = await storage.readConfig();
 
+  assert.equal(config.tasks.modelDownloads.dailyLimit, 1);
   assert.equal(config.tasks.modelDownloads.prioritizeFavorites, true);
   assert.deepEqual(config.tasks.modelDownloads.catalogCategories, []);
   assert.equal(config.tasks.modelDownloads.cleanupAfterHours, 1);
+});
+
+test('limita a diez los diseños diarios guardados por versiones anteriores', async () => {
+  const legacy = await storage.readConfig();
+  legacy.tasks.modelDownloads.dailyLimit = 30;
+  await fs.writeFile(path.join(temporaryDataDir, 'config.json'), JSON.stringify(legacy));
+
+  const migrated = await storage.readConfig();
+
+  assert.equal(migrated.tasks.modelDownloads.dailyLimit, 10);
 });
 
 test('limpia descargas temporales vencidas y conserva las recientes', async () => {

@@ -55,7 +55,7 @@ const CATALOG_SORTS = [
 ];
 
 export async function runModelDownloads(taskConfig = {}, options = {}) {
-  const dailyLimit = options.test || options.single ? 1 : clamp(Number(taskConfig.dailyLimit), 0, 30, 1);
+  const dailyLimit = options.test || options.single ? 1 : clamp(Number(taskConfig.dailyLimit), 0, 10, 1);
   const minIntervalMinutes = clamp(Number(taskConfig.minIntervalMinutes), 10, 1440, 10);
   const catalogCategories = normalizeCatalogCategories(taskConfig.catalogCategories);
   const cleanupAfterHours = Math.min(168, Math.max(1, Number(taskConfig.cleanupAfterHours) || 1));

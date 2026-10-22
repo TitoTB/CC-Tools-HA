@@ -941,7 +941,7 @@ app.patch('/api/config', async (req, res) => {
     config.tasks.modelDownloads.windowStart = validClock(input.modelDownloads.windowStart, '08:00');
     config.tasks.modelDownloads.windowEnd = validClock(input.modelDownloads.windowEnd, '12:00');
     config.tasks.modelDownloads.timezone = config.timezone || 'Europe/Madrid';
-    config.tasks.modelDownloads.dailyLimit = clamp(Number(input.modelDownloads.dailyLimit), 0, 30, 1);
+    config.tasks.modelDownloads.dailyLimit = clamp(Number(input.modelDownloads.dailyLimit), 0, 10, 1);
     config.tasks.modelDownloads.minIntervalMinutes = clamp(Number(input.modelDownloads.minIntervalMinutes), 10, 1440, 10);
     config.tasks.modelDownloads.cleanupAfterHours = clamp(Number(input.modelDownloads.cleanupAfterHours), 1, 168, 1);
     config.tasks.modelDownloads.prioritizeFavorites = input.modelDownloads.prioritizeFavorites !== false;
@@ -1454,7 +1454,7 @@ function buildSchedulePreview(config, runs = []) {
   const today = dayKey(downloads.timezone || 'Europe/Madrid');
   const plan = Array.isArray(downloads.downloadPlan) ? downloads.downloadPlan : [];
   const downloadEvents = todayDownloadEvents(runs, downloads);
-  const dailyLimit = Math.max(0, Math.min(30, Number(downloads.dailyLimit) || 0));
+  const dailyLimit = Math.max(0, Math.min(10, Number(downloads.dailyLimit) || 0));
 
   if (downloads.enabled) {
     downloadEvents.forEach((event, index) => {
@@ -1663,7 +1663,7 @@ function ensureCurrentDownloadPlan(downloads, runs = []) {
   if (!downloads?.enabled) return false;
   const timezone = downloads.timezone || 'Europe/Madrid';
   const today = dayKey(timezone);
-  const dailyLimit = Math.max(0, Math.min(30, Number(downloads.dailyLimit) || 0));
+  const dailyLimit = Math.max(0, Math.min(10, Number(downloads.dailyLimit) || 0));
   if (downloads.downloadPlanDate === today) return false;
 
   const attemptsToday = todayDownloadAttempts(runs, downloads).length;
@@ -1887,7 +1887,7 @@ function clamp(value, min, max, fallback) {
 }
 
 function requiredModelDownloadWindowMinutes(taskConfig) {
-  const dailyLimit = clamp(Number(taskConfig.dailyLimit), 0, 30, 1);
+  const dailyLimit = clamp(Number(taskConfig.dailyLimit), 0, 10, 1);
   const minIntervalMinutes = clamp(Number(taskConfig.minIntervalMinutes), 10, 1440, 10);
   return dailyLimit * (minIntervalMinutes + 2);
 }

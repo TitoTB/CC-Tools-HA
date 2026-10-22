@@ -44,7 +44,7 @@ export function scheduleNextRunInCurrentWindow(taskConfig, now = new Date(), min
 }
 
 export function generateDownloadPlan(taskConfig, now = new Date(), options = {}) {
-  const dailyLimit = Math.max(0, Math.min(30, Number(taskConfig.dailyLimit) || 0));
+  const dailyLimit = Math.max(0, Math.min(10, Number(taskConfig.dailyLimit) || 0));
   const planCount = Math.max(0, Math.min(dailyLimit, Number(options.remainingCount ?? dailyLimit) || 0));
   if (dailyLimit <= 0 || planCount <= 0) return { date: dayKey(taskConfig.timezone, now), plan: [], cursor: 0, nextRunAt: '' };
 

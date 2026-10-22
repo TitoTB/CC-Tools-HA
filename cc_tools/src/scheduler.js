@@ -733,7 +733,7 @@ function ensureDownloadPlan(taskConfig, runs = [], now = new Date()) {
     return changed;
   }
 
-  const dailyLimit = Math.max(0, Math.min(30, Number(taskConfig.dailyLimit) || 0));
+  const dailyLimit = Math.max(0, Math.min(10, Number(taskConfig.dailyLimit) || 0));
   const remainingCount = Math.max(0, dailyLimit - attemptsToday);
   applyDownloadPlan(taskConfig, generateDownloadPlan(taskConfig, now, { remainingCount }), attemptsToday);
   taskConfig.downloadsToday = attemptsToday;

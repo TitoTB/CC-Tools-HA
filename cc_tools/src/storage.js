@@ -850,6 +850,10 @@ function normalizeStoredConfig(stored) {
   config.tasks.modelDownloads = Object.fromEntries(
     Object.keys(DEFAULT_CONFIG.tasks.modelDownloads).map((key) => [key, storedDownloadTask[key]])
   );
+  config.tasks.modelDownloads.dailyLimit = Math.max(
+    0,
+    Math.min(10, Number(config.tasks.modelDownloads.dailyLimit) || 0)
+  );
   config.crealityFavorites = normalizeFavoriteProfiles(config.crealityFavorites);
   config.shopGoal = normalizeStoredShopGoal(config.shopGoal);
   config.shopOrders = normalizeShopOrdersState(config.shopOrders);
