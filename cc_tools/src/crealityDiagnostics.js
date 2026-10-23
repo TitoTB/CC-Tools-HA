@@ -372,7 +372,15 @@ async function loginRequired(page) {
     'a:has-text("Iniciar sesión")'
   ];
   for (const selector of selectors) {
-    if (await page.locator(selector).first().isVisible().catch(() => false)) return true;
+    const matches = page.locator(selector);
+    if (typeof matches.count !== 'function' || typeof matches.nth !== 'function') {
+      if (await matches.first().isVisible().catch(() => false)) return true;
+      continue;
+    }
+    const count = await matches.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      if (await matches.nth(index).isVisible().catch(() => false)) return true;
+    }
   }
   return isCrealityLoginUrl(page.url());
 }

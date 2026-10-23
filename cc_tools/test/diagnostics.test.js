@@ -15,6 +15,31 @@ test('reconoce el centro de cuentas como cierre de sesión', () => {
   assert.equal(isCrealityLoginUrl('https://www.crealitycloud.com/es/model-detail/test'), false);
 });
 
+test('detecta el acceso cerrado aunque el primer control de login esté oculto', async () => {
+  const url = 'https://www.crealitycloud.com/es/check-in';
+  const page = {
+    url: () => url,
+    title: async () => 'Registro Creality Cloud',
+    frames: () => [{ url: () => url }],
+    locator: (selector) => {
+      if (selector === 'body') {
+        return { innerText: async () => 'Registro Creality Cloud Iniciar sesión Calendario de registro' };
+      }
+      const loginSelector = /Log In|Iniciar sesión/.test(selector);
+      const visibility = loginSelector ? [false, true] : [false];
+      return {
+        first: () => ({ isVisible: async () => visibility[0] }),
+        count: async () => visibility.length,
+        nth: (index) => ({ isVisible: async () => visibility[index] })
+      };
+    }
+  };
+
+  const result = await inspectCrealityPage(page, { snapshot: async () => [] }, { requireBody: true });
+
+  assert.equal(result.code, 'LOGIN_REQUIRED');
+});
+
 test('normaliza una excepción nula sin ocultar la fase que falló', () => {
   const error = normalizeCaughtError(null, {
     code: 'EMPTY_DOWNLOAD_ERROR',
@@ -278,7 +303,9 @@ function fakePage({ url, title, body }) {
         return { innerText: async () => body };
       }
       return {
-        first: () => ({ isVisible: async () => false })
+        first: () => ({ isVisible: async () => false }),
+        count: async () => 0,
+        nth: () => ({ isVisible: async () => false })
       };
     }
   };

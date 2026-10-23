@@ -416,10 +416,11 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
   }
   await page.waitForTimeout(750);
   const profileResponse = await profileResponsePromise;
+  let profileState = 'unknown';
   if (profileResponse) {
     const payload = await profileResponse.json().catch(() => null);
-    const state = profileSessionState(payload, profileResponse.status());
-    if (state === 'logged_out') {
+    profileState = profileSessionState(payload, profileResponse.status());
+    if (profileState === 'logged_out') {
       const diagnostic = {
         code: 'LOGIN_REQUIRED',
         category: 'session',
@@ -438,16 +439,20 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
     }
   }
   const diagnostic = await inspectCrealityPage(page, null);
-  if (!diagnostic || ![
-    'LOGIN_REQUIRED',
-    'SECURITY_CHALLENGE'
-  ].includes(diagnostic.code)) return;
+  if (diagnostic && ['LOGIN_REQUIRED', 'SECURITY_CHALLENGE'].includes(diagnostic.code)) {
+    const error = new Error(diagnostic.message);
+    error.code = diagnostic.code;
+    error.systemic = true;
+    error.diagnostic = diagnostic;
+    throw error;
+  }
 
-  const error = new Error(diagnostic.message);
-  error.code = diagnostic.code;
-  error.systemic = true;
-  error.diagnostic = diagnostic;
-  throw error;
+  if (profileState === 'authenticated') return;
+
+  throw sessionCheckUnavailableError(
+    new Error('Creality Cloud no devolvió una confirmación positiva del perfil autenticado.'),
+    page.url()
+  );
 }
 
 export function isCrealityApplicationPage(url) {

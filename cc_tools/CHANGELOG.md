@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.38
+
+- Solo reanuda las automatizaciones cuando Creality Cloud confirma positivamente el perfil autenticado.
+- Mantiene las tareas pausadas cuando la comprobación de sesión no devuelve una respuesta concluyente.
+- Detecta el acceso cerrado aunque el primer control de inicio de sesión encontrado esté oculto.
+- Evita que el check-in muestre un estado desconocido cuando realmente se ha cerrado la sesión.
+
 ## 1.0.37
 
 - Limita a diez el número máximo de diseños que se pueden descubrir cada día.
