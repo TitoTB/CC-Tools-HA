@@ -1548,8 +1548,7 @@ export function transientCrealityServiceFailure(error) {
     || String(message).match(/HTTP\s+(502|503|504)/i)?.[1]
   );
   const navigationTimeout = /page\.goto: Timeout \d+ms exceeded|Navigation timeout/i.test(message);
-  const unavailable = code === 'SESSION_CHECK_UNAVAILABLE'
-    || code === 'CREALITY_SERVICE_UNAVAILABLE'
+  const unavailable = code === 'CREALITY_SERVICE_UNAVAILABLE'
     || code === 'EMPTY_BROWSER_ERROR'
     || code === 'EMPTY_TASK_ERROR'
     || code === 'EMPTY_DOWNLOAD_ERROR'

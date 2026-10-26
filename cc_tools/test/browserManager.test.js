@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isCrealityApplicationPage, isCrealityIdentityPage, profileSessionState } from '../src/browserManager.js';
+import {
+  isCrealityApplicationPage,
+  isCrealityIdentityPage,
+  profileSessionState,
+  sessionCheckOutcome
+} from '../src/browserManager.js';
 
 test('reconoce una respuesta autenticada del perfil', () => {
   assert.equal(profileSessionState({
@@ -24,6 +29,19 @@ test('reconoce token inválido y perfil vacío como sesión cerrada', () => {
 test('no confunde una respuesta desconocida con una sesión cerrada', () => {
   assert.equal(profileSessionState(null), 'unknown');
   assert.equal(profileSessionState({ code: 503, msg: 'Unavailable' }), 'unknown');
+});
+
+test('una comprobación inconclusa permite la tarea sin confirmar la sesión', () => {
+  assert.deepEqual(sessionCheckOutcome('unknown'), {
+    allowTask: true,
+    confirmAuthenticated: false,
+    state: 'inconclusive'
+  });
+  assert.deepEqual(sessionCheckOutcome('authenticated'), {
+    allowTask: true,
+    confirmAuthenticated: true,
+    state: 'authenticated'
+  });
 });
 
 test('solo revisa una sesión interactiva cuando ya volvió a Creality Cloud', () => {

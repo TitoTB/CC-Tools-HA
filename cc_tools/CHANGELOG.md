@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.39
+
+- Corrige la regresión de la versión 1.0.38 que podía bloquear todas las tareas si el Banco de trabajo no solicitaba automáticamente el perfil del usuario.
+- Permite continuar una tarea cuando la comprobación de sesión es inconclusa, sin marcar por ello la sesión como restablecida.
+- Mantiene la detección explícita de sesiones cerradas, tokens inválidos y verificaciones de seguridad.
+- Evita clasificar por sí sola una comprobación de sesión inconclusa como una caída general de Creality Cloud.
+- Aplaza las tareas programadas mientras el navegador remoto está abierto, en lugar de cerrar la sesión interactiva del usuario.
+
 ## 1.0.38
 
 - Solo reanuda las automatizaciones cuando Creality Cloud confirma positivamente el perfil autenticado.

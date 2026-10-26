@@ -164,6 +164,10 @@ test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilida
     systemic: false,
     message: 'Una ficha concreta no terminó de cargar.'
   }), null);
+  assert.equal(transientCrealityServiceFailure({
+    code: 'SESSION_CHECK_UNAVAILABLE',
+    message: 'Creality Cloud no devolvió la respuesta opcional del perfil.'
+  }), null);
   assert.equal(transientCrealityServiceFailure(null), null);
   assert.equal(transientCrealityServiceFailure(undefined), null);
   assert.equal(transientCrealityServiceFailure({}), null);
