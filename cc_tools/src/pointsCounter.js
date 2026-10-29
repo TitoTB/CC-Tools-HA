@@ -261,7 +261,7 @@ export function mergePointTransactions(current = [], incoming = []) {
     } else if (structuredBases.has(baseKey) || structuredOccurrences.has(occurrenceKey)) {
       continue;
     }
-    const identity = sourceType ? sourceType.toLocaleLowerCase('en') : 'legacy';
+    const identity = pointTransactionIdentity(normalized.type, sourceType);
     const key = `${baseKey}|${identity}`;
     merged.set(key, normalized);
     if (!sourceType) {
@@ -272,6 +272,14 @@ export function mergePointTransactions(current = [], incoming = []) {
   }
   return [...merged.values()]
     .sort((left, right) => `${left.date}|${left.time}|${left.type}`.localeCompare(`${right.date}|${right.time}|${right.type}`));
+}
+
+function pointTransactionIdentity(type, sourceType) {
+  if (!sourceType) return 'legacy';
+  const normalizedSource = normalizePointTaskLabel(sourceType).toLowerCase();
+  if (/consecutive check-?in$/.test(normalizedSource)) return 'checkin:consecutive';
+  if (/member double check-?in$/.test(normalizedSource)) return 'checkin:member-double';
+  return `task:${normalizePointTaskLabel(type).toLocaleLowerCase('es-ES')}`;
 }
 
 function classifyStoredPointTask(transaction, sourceType) {

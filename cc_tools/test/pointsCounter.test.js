@@ -167,6 +167,58 @@ test('conserva dos tipos de check-in con la misma hora e importe', () => {
   assert.deepEqual(transactions.map((transaction) => transaction.type), ['Check-in diario', 'Check-in diario']);
 });
 
+test('deduplica movimientos repetidos cuyo origen incluye texto de la página', () => {
+  const cases = [
+    ['Consecutive Check-in', 'Check-in diario', 30],
+    ['Download Models', 'Descargas realizadas', 1],
+    ['Finish a Print', 'Enviar una impresión', 5],
+    ['Image comments', 'Comentarios', 2],
+    ['Like 3D Model', 'Dar me gusta', 1]
+  ];
+  const transactions = mergePointTransactions([], cases.flatMap(([sourceType, type, amount], index) => {
+    const time = `10:00:${String(index).padStart(2, '0')}`;
+    return [{
+      date: '2026-10-18',
+      time,
+      amount,
+      type,
+      sourceType: `Puntos estándar 10.000 Tienda Tareas ${sourceType}`
+    }, {
+      date: '2026-10-18',
+      time,
+      amount,
+      type,
+      sourceType
+    }];
+  }));
+
+  assert.equal(transactions.length, cases.length);
+  assert.equal(transactions.reduce((total, transaction) => total + transaction.amount, 0), 39);
+  assert.deepEqual(transactions.map((transaction) => transaction.type), cases.map(([, type]) => type));
+});
+
+test('limpia los duplicados ya almacenados al combinar una nueva lectura', () => {
+  const current = [{
+    date: '2026-10-18',
+    time: '00:15:41',
+    amount: 30,
+    type: 'Check-in diario',
+    sourceType: 'Tienda Tareas Consecutive Check-in'
+  }, {
+    date: '2026-10-18',
+    time: '00:15:41',
+    amount: 30,
+    type: 'Check-in diario',
+    sourceType: 'Consecutive Check-in'
+  }];
+
+  const transactions = mergePointTransactions(current, []);
+
+  assert.equal(transactions.length, 1);
+  assert.equal(transactions[0].amount, 30);
+  assert.equal(transactions[0].sourceType, 'Consecutive Check-in');
+});
+
 test('sustituye el movimiento legado colapsado al recargar los tipos originales', () => {
   const legacy = [
     {

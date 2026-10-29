@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.40
+
+- Evita contabilizar dos veces un mismo movimiento cuando Creality Cloud repite la operación con texto adicional de la página.
+- Deduplica correctamente check-ins, descargas, impresiones, comentarios y me gusta por su identidad normalizada.
+- Mantiene separadas las recompensas legítimas `Consecutive Check-in` y `Member Double Check-in` aunque compartan fecha, hora e importe.
+- Limpia automáticamente los duplicados históricos almacenados durante la siguiente actualización de puntos.
+
 ## 1.0.39
 
 - Corrige la regresión de la versión 1.0.38 que podía bloquear todas las tareas si el Banco de trabajo no solicitaba automáticamente el perfil del usuario.
