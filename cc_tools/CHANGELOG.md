@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.42
+
+- Muestra sin decimales todos los importes del popup de historial de puntos.
+- Mantiene intactos los valores originales para los cálculos internos.
+
 ## 1.0.41
 
 - Añade una papelera roja para retirar del seguimiento los pedidos disponibles o cancelados.

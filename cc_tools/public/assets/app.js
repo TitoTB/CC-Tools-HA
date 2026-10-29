@@ -3203,7 +3203,7 @@ function pointPeriodTitle(start, end, unit, timezone) {
 }
 
 function formatPoints(value) {
-  return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(value);
+  return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 0 }).format(value);
 }
 
 function formatPointsDate(date, timezone) {
