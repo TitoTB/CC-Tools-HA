@@ -69,9 +69,25 @@ export function archiveShopOrder(value, orderId, now = new Date()) {
   const state = normalizeShopOrdersState(value);
   const order = state.items.find((item) => item.id === String(orderId || ''));
   if (!order || order.statusKind !== 'shipped') return null;
+  return hideShopOrder(state, order, now);
+}
+
+export function dismissShopOrder(value, orderId, now = new Date()) {
+  const state = normalizeShopOrdersState(value);
+  const order = state.items.find((item) => item.id === String(orderId || ''));
+  if (!order || !isDismissibleShopOrder(order)) return null;
+  return hideShopOrder(state, order, now);
+}
+
+function hideShopOrder(state, order, now) {
   order.archived = true;
   order.archivedAt = now.toISOString();
   return state;
+}
+
+function isDismissibleShopOrder(order) {
+  const status = String(order.status || '').trim().toLocaleLowerCase('es-ES');
+  return order.statusKind === 'available' || status === 'disponible' || status === 'cancelado';
 }
 
 function normalizeStoredOrder(value) {

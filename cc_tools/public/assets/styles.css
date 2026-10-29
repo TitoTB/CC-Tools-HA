@@ -1390,7 +1390,8 @@ label span {
   color: #f5b942;
 }
 
-.points-shop-order-archive {
+.points-shop-order-archive,
+.points-shop-order-dismiss {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -1411,7 +1412,20 @@ label span {
   background: rgba(36, 170, 75, 0.8);
 }
 
-.points-shop-order-archive svg {
+.points-shop-order-dismiss {
+  border-color: rgba(239, 68, 68, 0.56);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.points-shop-order-dismiss:hover,
+.points-shop-order-dismiss:focus-visible {
+  color: #fff;
+  background: rgba(220, 38, 38, 0.9);
+}
+
+.points-shop-order-archive svg,
+.points-shop-order-dismiss svg {
   width: 16px;
   height: 16px;
   fill: currentColor;

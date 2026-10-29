@@ -69,6 +69,7 @@ import { notifyShippedShopOrders } from './shopOrderNotifications.js';
 import { pauseForExpiredSession, resumeAfterAuthenticatedLogin } from './sessionHealth.js';
 import {
   archiveShopOrder,
+  dismissShopOrder,
   markShopOrdersRefreshError,
   mergeShopOrdersState,
   shopOrdersRefreshDue,
@@ -211,6 +212,15 @@ app.patch('/api/shop/orders/:id/archive', async (req, res) => {
   const config = await readConfig();
   const orders = archiveShopOrder(config.shopOrders, req.params.id);
   if (!orders) return res.status(404).json({ ok: false, error: 'SHOP_ORDER_NOT_ARCHIVABLE' });
+  config.shopOrders = orders;
+  await writeConfig(config);
+  return res.json({ ok: true, orders });
+});
+
+app.patch('/api/shop/orders/:id/dismiss', async (req, res) => {
+  const config = await readConfig();
+  const orders = dismissShopOrder(config.shopOrders, req.params.id);
+  if (!orders) return res.status(404).json({ ok: false, error: 'SHOP_ORDER_NOT_DISMISSIBLE' });
   config.shopOrders = orders;
   await writeConfig(config);
   return res.json({ ok: true, orders });

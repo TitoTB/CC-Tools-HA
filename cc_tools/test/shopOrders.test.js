@@ -4,6 +4,7 @@ import { normalizeShopOrder } from '../src/shopOrders.js';
 import { formatAvailableShopOrderTelegram } from '../src/shopOrderNotifications.js';
 import {
   archiveShopOrder,
+  dismissShopOrder,
   mergeShopOrdersState,
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
@@ -111,6 +112,35 @@ test('solo permite archivar pedidos realmente enviados', () => {
     statusKey: '3:'
   }]);
   assert.equal(archiveShopOrder(shipped, 'shipped').items[0].archived, true);
+});
+
+test('permite retirar del seguimiento pedidos disponibles o cancelados', () => {
+  const available = mergeShopOrdersState({}, [{
+    id: 'available',
+    title: 'Cupón disponible',
+    status: 'Disponible',
+    statusKind: 'available',
+    statusKey: '1::coupon'
+  }]);
+  assert.equal(dismissShopOrder(available, 'available').items[0].archived, true);
+
+  const cancelled = mergeShopOrdersState({}, [{
+    id: 'cancelled',
+    title: 'Pedido cancelado',
+    status: 'Cancelado',
+    statusKind: 'neutral',
+    statusKey: '4:'
+  }]);
+  assert.equal(dismissShopOrder(cancelled, 'cancelled').items[0].archived, true);
+
+  const pending = mergeShopOrdersState({}, [{
+    id: 'pending',
+    title: 'Pedido pendiente',
+    status: 'Pendiente',
+    statusKind: 'pending',
+    statusKey: '2:'
+  }]);
+  assert.equal(dismissShopOrder(pending, 'pending'), null);
 });
 
 test('notifica exclusivamente la transición de pendiente a disponible o enviado', () => {

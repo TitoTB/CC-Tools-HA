@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.41
+
+- Añade una papelera roja para retirar del seguimiento los pedidos disponibles o cancelados.
+- Conserva ocultos esos pedidos mientras no cambie su estado, sin eliminarlos de Creality Cloud.
+- Actualiza el enlace de la guía para conectar OctoPrint con Creality Cloud.
+
 ## 1.0.40
 
 - Evita contabilizar dos veces un mismo movimiento cuando Creality Cloud repite la operación con texto adicional de la página.

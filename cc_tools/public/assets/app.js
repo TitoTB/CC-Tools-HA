@@ -384,10 +384,13 @@ fields.pointsShopProductPreview.addEventListener('click', async (event) => {
   toast('Programación del canje eliminada.');
 });
 fields.pointsShopOrdersList.addEventListener('click', async (event) => {
-  const button = event.target.closest('[data-archive-shop-order]');
+  const button = event.target.closest('[data-archive-shop-order], [data-dismiss-shop-order]');
   if (!button) return;
   button.disabled = true;
-  const result = await api(`/api/shop/orders/${encodeURIComponent(button.dataset.archiveShopOrder)}/archive`, {
+  const dismissing = Boolean(button.dataset.dismissShopOrder);
+  const orderId = dismissing ? button.dataset.dismissShopOrder : button.dataset.archiveShopOrder;
+  const action = dismissing ? 'dismiss' : 'archive';
+  const result = await api(`/api/shop/orders/${encodeURIComponent(orderId)}/${action}`, {
     method: 'PATCH'
   });
   if (!result.ok) {
@@ -396,7 +399,7 @@ fields.pointsShopOrdersList.addEventListener('click', async (event) => {
   }
   state.config.shopOrders = result.orders;
   renderShopOrders(result.orders);
-  toast('Pedido archivado.');
+  toast(dismissing ? 'Pedido eliminado del seguimiento.' : 'Pedido archivado.');
 });
 
 fields.refreshShopOrders.addEventListener('click', () => {
@@ -2834,6 +2837,11 @@ function renderShopOrders(value = {}) {
           <svg viewBox="0 0 448 512" aria-hidden="true"><path d="M438.6 105.4c12.5 12.5 12.5 32.8 0 45.3l-256 256c-12.5 12.5-32.8 12.5-45.3 0l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L160 338.7 393.4 105.4c12.5-12.5 32.8-12.5 45.3 0z"/></svg>
         </button>
       ` : ''}
+      ${order.statusKind === 'available' || order.status === 'Cancelado' ? `
+        <button class="points-shop-order-dismiss" type="button" data-dismiss-shop-order="${escapeHtml(order.id)}" title="Eliminar del seguimiento" aria-label="Eliminar ${escapeHtml(order.title)} del seguimiento">
+          <svg viewBox="0 0 448 512" aria-hidden="true"><path d="M135.2 17.7L128 32H32C14.3 32 0 46.3 0 64S14.3 96 32 96H416c17.7 0 32-14.3 32-32S433.7 32 416 32H320l-7.2-14.3C307.4 6.8 296.3 0 284.2 0H163.8c-12.1 0-23.2 6.8-28.6 17.7zM416 128H32L53.2 467c1.6 25.3 22.6 45 48 45H346.8c25.4 0 46.5-19.7 48-45L416 128z"/></svg>
+        </button>
+      ` : ''}
     </article>
   `).join('');
 }
@@ -3775,6 +3783,7 @@ function errorMessage(error, payload = {}) {
     FAVORITE_PROFILE_DUPLICATE: 'Este perfil ya está en favoritos.',
     FAVORITE_PROFILE_EMPTY: 'Este perfil no tiene diseños publicados y no puede añadirse como favorito.',
     SHOP_ORDER_NOT_ARCHIVABLE: 'Este pedido no se puede archivar todavía.',
+    SHOP_ORDER_NOT_DISMISSIBLE: 'Este pedido no se puede eliminar del seguimiento.',
     FAVORITE_PROFILE_NOT_FOUND: 'No se pudo encontrar ese perfil en Creality Cloud.',
     FAVORITE_PROFILE_DEFAULT: 'El perfil predeterminado no se puede eliminar.',
     FAVORITE_PROFILE_UNAVAILABLE: 'No se pudieron obtener los datos del perfil.',
