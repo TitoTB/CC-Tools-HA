@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.43
+
+- Recupera automáticamente una sesión cerrada seleccionando la cuenta recordada mediante el flujo OAuth nativo de Creality Cloud.
+- Prioriza la cuenta cuyo usuario coincide con el perfil configurado y evita iniciar sesión con otra cuenta recordada.
+- Verifica el perfil después del acceso y mantiene las automatizaciones pausadas cuando el token ha caducado o se necesita intervención manual.
+- Aclara en Ajustes que el inicio automático utiliza la cuenta recordada por el navegador y no almacena contraseñas nuevas.
+
 ## 1.0.42
 
 - Muestra sin decimales todos los importes del popup de historial de puntos.

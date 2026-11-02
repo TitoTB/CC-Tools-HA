@@ -153,7 +153,8 @@ export async function verifyPersistedSession() {
   return { checked: true, ...(session || {}), authenticated: true };
 }
 
-export async function attemptRememberedSessionLogin() {
+export async function attemptRememberedSessionLogin(options = {}) {
+  const expectedUserId = String(options.expectedUserId || '').trim();
   if (activeMode) {
     return {
       attempted: false,
@@ -174,6 +175,26 @@ export async function attemptRememberedSessionLogin() {
 
     await page.goto(SESSION_CHECK_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
     if (isCrealityIdentityPage(page.url())) {
+      const rememberedAccounts = await page.evaluate(() => window.localStorage.getItem('id-application-user'));
+      const selection = prioritizeRememberedAccount(rememberedAccounts, expectedUserId);
+      if (!selection.ok) {
+        return {
+          attempted: true,
+          authenticated: false,
+          reason: 'MANUAL_LOGIN_REQUIRED',
+          message: rememberedAccountFailureMessage(selection.reason),
+          url: page.url()
+        };
+      }
+      if (selection.serialized !== rememberedAccounts) {
+        await page.evaluate((serialized) => {
+          window.localStorage.setItem('id-application-user', serialized);
+        }, selection.serialized);
+      }
+      await page.goto(rememberedAccountAutoLoginUrl(page.url()), {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
       await page.waitForURL(
         (url) => isCrealityApplicationPage(url.toString()),
         { timeout: 20000, waitUntil: 'domcontentloaded' }
@@ -185,6 +206,7 @@ export async function attemptRememberedSessionLogin() {
         attempted: true,
         authenticated: false,
         reason: 'MANUAL_LOGIN_REQUIRED',
+        message: 'Creality Cloud requiere completar el inicio de sesión manualmente.',
         url: page.url()
       };
     }
@@ -198,6 +220,15 @@ export async function attemptRememberedSessionLogin() {
         url: page.url()
       };
     }
+    if (expectedUserId && sessionCheck.userId && sessionCheck.userId !== expectedUserId) {
+      return {
+        attempted: true,
+        authenticated: false,
+        reason: 'MANUAL_LOGIN_REQUIRED',
+        message: 'La cuenta recuperada no coincide con el perfil configurado en CC Tools.',
+        url: page.url()
+      };
+    }
     const session = await confirmAuthenticatedSession();
     return { attempted: true, ...session, authenticated: true, url: page.url() };
   } catch (error) {
@@ -207,6 +238,7 @@ export async function attemptRememberedSessionLogin() {
         attempted: true,
         authenticated: false,
         reason: 'MANUAL_LOGIN_REQUIRED',
+        message: 'La cuenta recordada ya no permite iniciar sesión automáticamente.',
         url: activeContext?.pages?.()[0]?.url?.() || ''
       };
     }
@@ -436,9 +468,11 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
   await page.waitForTimeout(750);
   const profileResponse = await profileResponsePromise;
   let profileState = 'unknown';
+  let userId = '';
   if (profileResponse) {
     const payload = await profileResponse.json().catch(() => null);
     profileState = profileSessionState(payload, profileResponse.status());
+    userId = profileSessionUserId(payload);
     if (profileState === 'logged_out') {
       const diagnostic = {
         code: 'LOGIN_REQUIRED',
@@ -466,7 +500,7 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
     throw error;
   }
 
-  return sessionCheckOutcome(profileState);
+  return { ...sessionCheckOutcome(profileState), userId };
 }
 
 export function sessionCheckOutcome(profileState = 'unknown') {
@@ -494,6 +528,61 @@ export function isCrealityIdentityPage(url) {
   }
 }
 
+export function rememberedAccountAutoLoginUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    if (url.hostname !== 'id.creality.com') return '';
+    url.searchParams.set('auto_login', '1');
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+export function prioritizeRememberedAccount(value, expectedUserId = '', now = Date.now()) {
+  let accounts;
+  try {
+    accounts = JSON.parse(String(value || ''));
+  } catch {
+    return { ok: false, reason: 'REMEMBERED_ACCOUNT_INVALID' };
+  }
+  if (!Array.isArray(accounts) || !accounts.length) {
+    return { ok: false, reason: 'REMEMBERED_ACCOUNT_NOT_FOUND' };
+  }
+
+  const validAccounts = accounts.filter((account) => String(account?.userId || '').trim());
+  if (!validAccounts.length) return { ok: false, reason: 'REMEMBERED_ACCOUNT_NOT_FOUND' };
+
+  const targetUserId = String(expectedUserId || '').trim();
+  const selected = targetUserId
+    ? validAccounts.find((account) => String(account.userId) === targetUserId)
+    : validAccounts.length === 1 ? validAccounts[0] : null;
+  if (!selected) {
+    return {
+      ok: false,
+      reason: targetUserId ? 'REMEMBERED_ACCOUNT_NOT_FOUND' : 'REMEMBERED_ACCOUNT_AMBIGUOUS'
+    };
+  }
+
+  const latestTime = Math.max(Number(now) || Date.now(), ...validAccounts.map((account) => Number(account.time) || 0));
+  selected.time = latestTime + 1;
+  return {
+    ok: true,
+    userId: String(selected.userId),
+    serialized: JSON.stringify(accounts)
+  };
+}
+
+function rememberedAccountFailureMessage(reason) {
+  if (reason === 'REMEMBERED_ACCOUNT_AMBIGUOUS') {
+    return 'Hay varias cuentas recordadas y no se pudo identificar cuál corresponde a CC Tools.';
+  }
+  if (reason === 'REMEMBERED_ACCOUNT_INVALID') {
+    return 'Los datos de la cuenta recordada no son válidos.';
+  }
+  return 'No se encontró en el navegador la cuenta configurada en CC Tools.';
+}
+
 export function profileSessionState(payload, httpStatus = 200) {
   if ([401, 403].includes(Number(httpStatus))) return 'logged_out';
   if (!payload || typeof payload !== 'object') return 'unknown';
@@ -508,6 +597,10 @@ export function profileSessionState(payload, httpStatus = 200) {
   }
   if (code === 0 && Object.hasOwn(payload, 'result')) return 'logged_out';
   return 'unknown';
+}
+
+export function profileSessionUserId(payload) {
+  return String(payload?.result?.profileUserInfo?.base?.userId || '').trim();
 }
 
 function profileSessionTechnical(payload, httpStatus) {
