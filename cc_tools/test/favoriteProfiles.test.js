@@ -23,6 +23,20 @@ test('parseFavoriteProfileUrl rejects unrelated and malformed URLs', () => {
   assert.equal(parseFavoriteProfileUrl('not a url'), null);
 });
 
+test('profile tabs keep the base URL and do not create duplicate favorites', () => {
+  const userId = '123456789';
+  const profileUrl = `https://www.crealitycloud.com/es/user/${userId}`;
+  const variants = ['', '/model', '/pinned-models', '/profile', '/model/?from=share#models'];
+  for (const suffix of variants) {
+    assert.deepEqual(parseFavoriteProfileUrl(` ${profileUrl}${suffix} `), { userId, profileUrl });
+  }
+  const saved = normalizeFavoriteProfiles(variants.map(suffix => ({ name: 'Maker', profileUrl: profileUrl + suffix })));
+  const matching = saved.filter(profile => profile.userId === userId);
+  assert.equal(matching.length, 1);
+  assert.equal(matching[0].profileUrl, profileUrl);
+  assert.deepEqual(normalizeFavoriteProfiles(saved), saved);
+});
+
 test('normalizeFavoriteProfiles always includes Aguacatec first and removes duplicates', () => {
   const profiles = normalizeFavoriteProfiles([
     { ...DEFAULT_FAVORITE_PROFILE, name: 'Alterado' },
