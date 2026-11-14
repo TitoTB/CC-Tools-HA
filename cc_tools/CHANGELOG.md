@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.46
+
+- Reconoce la estructura HTML actual y la anterior de los perfiles favoritos de Creality Cloud.
+- Valida que el identificador mostrado corresponda al perfil solicitado antes de guardarlo.
+- Evita confundir el avatar del usuario conectado con el avatar del perfil y admite perfiles sin imagen.
+- Mantiene la comprobación que impide añadir perfiles sin diseños publicados.
+
 ## 1.0.45
 
 - Detecta las verificaciones de Cloudflare en llamadas API mediante la cabecera oficial `cf-mitigated`, incluso cuando la respuesta utiliza HTTP 200.

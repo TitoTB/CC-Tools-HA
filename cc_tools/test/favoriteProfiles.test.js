@@ -15,6 +15,12 @@ test('parseFavoriteProfileUrl accepts Creality Cloud profile URLs and canonicali
     userId: '987654321',
     profileUrl: 'https://www.crealitycloud.com/es/user/987654321'
   });
+  for (const suffix of ['', '/model', '/profile', '/pinned-models']) {
+    assert.deepEqual(parseFavoriteProfileUrl(`https://www.crealitycloud.com/es/user/123456789${suffix}`), {
+      userId: '123456789',
+      profileUrl: 'https://www.crealitycloud.com/es/user/123456789'
+    });
+  }
 });
 
 test('parseFavoriteProfileUrl rejects unrelated and malformed URLs', () => {
