@@ -17,7 +17,8 @@ export function pauseForExpiredSession(config, taskId = '', diagnostic = {}, now
     pausedUntil: '',
     lastIncidentAt: now.toISOString(),
     pauseSource: 'session',
-    pauseTaskId: taskId
+    pauseTaskId: taskId,
+    nextChallengeCheckAt: ''
   };
   return { notificationRequired: !alreadyPaused, message };
 }
@@ -45,7 +46,8 @@ export function resumeAfterAuthenticatedLogin(config, profile = null, now = new 
     pauseTaskId: '',
     serviceFailureCount: 0,
     serviceFailureAt: '',
-    serviceUnavailableNotified: false
+    serviceUnavailableNotified: false,
+    nextChallengeCheckAt: ''
   };
   return true;
 }

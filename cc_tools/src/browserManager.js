@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
 import { browserSessionDir } from './storage.js';
-import { inspectCrealityPage, normalizeCaughtError } from './crealityDiagnostics.js';
+import { inspectCrealityPage, normalizeCaughtError, observeCrealityPage } from './crealityDiagnostics.js';
 import { isNavigationTimeout, navigateToCrealityPage } from './crealityNavigation.js';
 import { confirmAuthenticatedSession } from './sessionMonitor.js';
 
@@ -450,6 +450,7 @@ async function closeActiveContext() {
 
 async function assertAuthenticatedSession(context, preferredPage = null) {
   const page = preferredPage || context.pages()[0] || await context.newPage();
+  const observer = observeCrealityPage(page, 'session-check');
   const profileResponsePromise = page.waitForResponse(
     (response) => response.url().includes(SESSION_PROFILE_API_PATH),
     { timeout: 6000 }
@@ -459,48 +460,57 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
       timeout: 30000,
       attempts: 2
     });
-  } catch (error) {
-    if (isNavigationTimeout(error) || error?.code === 'NAVIGATION_TARGET_MISMATCH') {
-      throw sessionCheckUnavailableError(error, page.url());
-    }
-    throw error;
-  }
-  await page.waitForTimeout(750);
-  const profileResponse = await profileResponsePromise;
-  let profileState = 'unknown';
-  let userId = '';
-  if (profileResponse) {
-    const payload = await profileResponse.json().catch(() => null);
-    profileState = profileSessionState(payload, profileResponse.status());
-    userId = profileSessionUserId(payload);
-    if (profileState === 'logged_out') {
-      const diagnostic = {
-        code: 'LOGIN_REQUIRED',
-        category: 'session',
-        systemic: true,
-        message: 'La sesión de Creality Cloud ha caducado o no está iniciada.',
-        detectedAt: new Date().toISOString(),
-        url: page.url(),
-        httpStatus: profileResponse.status(),
-        technical: profileSessionTechnical(payload, profileResponse.status())
-      };
+    await page.waitForTimeout(750);
+    const profileResponse = await profileResponsePromise;
+    const diagnostic = await inspectCrealityPage(page, observer);
+    if (diagnostic && ['LOGIN_REQUIRED', 'SECURITY_CHALLENGE'].includes(diagnostic.code)) {
       const error = new Error(diagnostic.message);
       error.code = diagnostic.code;
       error.systemic = true;
       error.diagnostic = diagnostic;
       throw error;
     }
-  }
-  const diagnostic = await inspectCrealityPage(page, null);
-  if (diagnostic && ['LOGIN_REQUIRED', 'SECURITY_CHALLENGE'].includes(diagnostic.code)) {
-    const error = new Error(diagnostic.message);
-    error.code = diagnostic.code;
-    error.systemic = true;
-    error.diagnostic = diagnostic;
+    let profileState = 'unknown';
+    let userId = '';
+    if (profileResponse) {
+      const payload = await profileResponse.json().catch(() => null);
+      profileState = profileSessionState(payload, profileResponse.status());
+      userId = profileSessionUserId(payload);
+      if (profileState === 'logged_out') {
+        const diagnostic = {
+          code: 'LOGIN_REQUIRED',
+          category: 'session',
+          systemic: true,
+          message: 'La sesión de Creality Cloud ha caducado o no está iniciada.',
+          detectedAt: new Date().toISOString(),
+          url: page.url(),
+          httpStatus: profileResponse.status(),
+          technical: profileSessionTechnical(payload, profileResponse.status())
+        };
+        const error = new Error(diagnostic.message);
+        error.code = diagnostic.code;
+        error.systemic = true;
+        error.diagnostic = diagnostic;
+        throw error;
+      }
+    }
+    return { ...sessionCheckOutcome(profileState), userId };
+  } catch (error) {
+    const diagnostic = await inspectCrealityPage(page, observer).catch(() => null);
+    if (diagnostic && ['LOGIN_REQUIRED', 'SECURITY_CHALLENGE'].includes(diagnostic.code)) {
+      const diagnosedError = new Error(diagnostic.message);
+      diagnosedError.code = diagnostic.code;
+      diagnosedError.systemic = true;
+      diagnosedError.diagnostic = diagnostic;
+      throw diagnosedError;
+    }
+    if (isNavigationTimeout(error) || error?.code === 'NAVIGATION_TARGET_MISMATCH') {
+      throw sessionCheckUnavailableError(error, page.url());
+    }
     throw error;
+  } finally {
+    observer.stop();
   }
-
-  return { ...sessionCheckOutcome(profileState), userId };
 }
 
 export function sessionCheckOutcome(profileState = 'unknown') {

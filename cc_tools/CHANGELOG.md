@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.45
+
+- Detecta las verificaciones de Cloudflare en llamadas API mediante la cabecera oficial `cf-mitigated`, incluso cuando la respuesta utiliza HTTP 200.
+- Conserva en el diagnóstico el proveedor de seguridad, `cf-ray`, el tipo de contenido y una muestra segura de las respuestas interceptadas.
+- Evita confundir una respuesta de Cloudflare con una sesión cerrada o con el rechazo funcional de una acción.
+- Recomprueba cada cinco minutos las pausas por verificación de seguridad y reanuda las automatizaciones cuando el perfil persistente vuelve a estar disponible.
+
 ## 1.0.44
 
 - Limita los candidatos para boost a modelos realmente descargados, laminados o impresos, excluyendo los diseños que solo proceden del índice de autores favoritos.

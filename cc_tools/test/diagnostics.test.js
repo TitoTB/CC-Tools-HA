@@ -7,7 +7,8 @@ import {
   isCrealityLoginUrl,
   isModelReviewFailureResponse,
   isSecurityChallengeResponse,
-  normalizeCaughtError
+  normalizeCaughtError,
+  securityChallengeProvider
 } from '../src/crealityDiagnostics.js';
 
 test('reconoce el centro de cuentas como cierre de sesión', () => {
@@ -190,6 +191,40 @@ test('una respuesta explícita de bloqueo de DataDome se registra como desafío'
     headers: { 'x-datadome-traffic-rule-response': 'BLOCK' }
   });
   assert.equal(challenge, true);
+});
+
+test('la cabecera oficial cf-mitigated detecta un desafío de Cloudflare en una llamada API', () => {
+  const response = {
+    status: 200,
+    url: 'https://www.crealitycloud.com/api/cxy/v3/model/action',
+    resourceType: 'fetch',
+    headers: { 'CF-Mitigated': 'challenge', 'content-type': 'text/html' }
+  };
+  assert.equal(isSecurityChallengeResponse(response), true);
+  assert.equal(securityChallengeProvider(response), 'cloudflare');
+});
+
+test('un desafío API de Cloudflare prevalece sobre una página visible aparentemente normal', async () => {
+  const url = 'https://www.crealitycloud.com/es/model-detail/modelo-de-prueba';
+  const page = fakePage({
+    url,
+    title: 'Modelo de prueba | Creality Cloud',
+    body: 'Modelo de prueba listo para imprimir. Ver archivos STL/CAD y añadir a la colección.'
+  });
+  const observer = {
+    snapshot: async () => [{
+      status: 200,
+      url: 'https://www.crealitycloud.com/api/cxy/v3/model/action',
+      resourceType: 'fetch',
+      headers: { 'cf-mitigated': 'challenge', 'content-type': 'text/html' },
+      challenge: true,
+      challengeProvider: 'cloudflare'
+    }]
+  };
+
+  const result = await inspectCrealityPage(page, observer, { requireBody: true });
+  assert.equal(result.code, 'SECURITY_CHALLENGE');
+  assert.equal(result.challengeProvider, 'cloudflare');
 });
 
 test('una ficha normal no falla aunque el observador haya visto el script de Cloudflare', async () => {

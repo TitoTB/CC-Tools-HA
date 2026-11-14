@@ -140,6 +140,26 @@ test('una sesión cerrada pausa las automatizaciones sin caducidad automática',
   assert.equal(config.crealitySession.authenticated, false);
 });
 
+test('un desafío de Cloudflare programa una comprobación temprana de recuperación', () => {
+  const config = { automationHealth: { state: 'active' } };
+  const before = Date.now();
+  const event = updateAutomationHealth(config, 'modelDownloads', 'error', {
+    details: {
+      incident: {
+        code: 'SECURITY_CHALLENGE_CLOUDFLARE',
+        message: 'Cloudflare solicitó una verificación de seguridad.',
+        systemic: true
+      }
+    }
+  });
+  const nextCheckAt = Date.parse(config.automationHealth.nextChallengeCheckAt);
+
+  assert.equal(event.paused, true);
+  assert.equal(config.automationHealth.state, 'paused');
+  assert.ok(nextCheckAt >= before + 4 * 60 * 1000);
+  assert.ok(nextCheckAt <= before + 6 * 60 * 1000);
+});
+
 test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilidad temporal', () => {
   assert.equal(transientCrealityServiceFailure({
     message: 'page.goto: Timeout 30000ms exceeded.'

@@ -26,7 +26,7 @@ import {
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
-import { abortAutomationBrowser, verifyPersistedSession } from './browserManager.js';
+import { abortAutomationBrowser, browserManagerState, verifyPersistedSession } from './browserManager.js';
 import {
   pauseForExpiredSession,
   resumeAfterAuthenticatedLogin
@@ -43,6 +43,7 @@ const TASK_IDS = [
 ];
 const MIN_AUTOMATION_GAP_MINUTES = 10;
 const SILENT_RETRY_MINUTES = 10;
+const SECURITY_CHALLENGE_RECHECK_MINUTES = 5;
 const DEFAULT_TASK_TIMEOUT_MS = 8 * 60 * 1000;
 
 let running = false;
@@ -1369,6 +1370,58 @@ async function holdForAutomationHealth(config) {
     }
     return true;
   }
+  if (isSecurityChallengeCode(health.reasonCode)) {
+    if (browserManagerState().mode === 'interactive') return true;
+    const nextCheckAt = Date.parse(health.nextChallengeCheckAt || '');
+    if (Number.isFinite(nextCheckAt) && nextCheckAt > Date.now()) return true;
+
+    const checkedAt = new Date();
+    try {
+      const verification = await verifyPersistedSession();
+      if (verification.authenticated) {
+        config.crealitySession = {
+          ...(config.crealitySession || {}),
+          authenticated: true,
+          checkedAt: new Date(verification.checkedAt || checkedAt).toISOString(),
+          reason: ''
+        };
+        config.automationHealth = {
+          ...health,
+          state: 'active',
+          reasonCode: '',
+          reason: '',
+          pausedAt: '',
+          pausedUntil: '',
+          lastRecoveredAt: checkedAt.toISOString(),
+          pauseSource: '',
+          pauseTaskId: '',
+          lastChallengeCheckAt: checkedAt.toISOString(),
+          nextChallengeCheckAt: ''
+        };
+        await writeConfig(config);
+        return false;
+      }
+    } catch (error) {
+      if (error?.code === 'LOGIN_REQUIRED') {
+        pauseForExpiredSession(config, health.pauseTaskId || '', error.diagnostic || error, checkedAt);
+        await writeConfig(config);
+        return true;
+      }
+      if (!['SECURITY_CHALLENGE', 'BROWSER_BUSY', 'REMOTE_BROWSER_OPEN', 'SESSION_CHECK_UNAVAILABLE'].includes(error?.code)) {
+        console.warn('[security] No se pudo comprobar la verificación de Cloudflare:', error?.message || String(error));
+      }
+    }
+
+    config.automationHealth = {
+      ...health,
+      lastChallengeCheckAt: checkedAt.toISOString(),
+      nextChallengeCheckAt: new Date(
+        checkedAt.getTime() + SECURITY_CHALLENGE_RECHECK_MINUTES * 60 * 1000
+      ).toISOString()
+    };
+    await writeConfig(config);
+    return true;
+  }
   const pausedUntil = Date.parse(health.pausedUntil || '');
   if (health.reasonCode === 'CREALITY_SERVICE_UNAVAILABLE'
     && Number.isFinite(pausedUntil)
@@ -1379,7 +1432,8 @@ async function holdForAutomationHealth(config) {
       pausedAt: '',
       pausedUntil: '',
       pauseSource: '',
-      pauseTaskId: ''
+      pauseTaskId: '',
+      nextChallengeCheckAt: ''
     };
     await writeConfig(config);
     return false;
@@ -1393,7 +1447,8 @@ async function holdForAutomationHealth(config) {
       pausedAt: '',
       pausedUntil: '',
       pauseSource: '',
-      pauseTaskId: ''
+      pauseTaskId: '',
+      nextChallengeCheckAt: ''
     };
     await writeConfig(config);
     return false;
@@ -1420,7 +1475,8 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       pauseTaskId: '',
       serviceFailureCount: 0,
       serviceFailureAt: '',
-      serviceUnavailableNotified: false
+      serviceUnavailableNotified: false,
+      nextChallengeCheckAt: ''
     };
     return recovered ? { recovered: true } : { serviceRecovered: true };
   }
@@ -1434,6 +1490,7 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       : 0;
     const rewardCooldownCount = rewardCooldown ? previousRewardCount + 1 : previousRewardCount;
     const loginRequired = incident.code === 'LOGIN_REQUIRED';
+    const securityChallenge = isSecurityChallengeCode(incident.code);
     if (loginRequired) pauseForExpiredSession(config, taskId, incident, now);
     const durationMs = incidentPauseMilliseconds(incident, now);
     const pauseSource = ['RATE_LIMITED', 'RATE_LIMIT_CONFIRMED'].includes(incident.code)
@@ -1451,7 +1508,11 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       rewardCooldownDate: rewardCooldown ? rewardCooldownDate : health.rewardCooldownDate || '',
       rewardCooldownCount,
       pauseSource: loginRequired ? 'session' : pauseSource,
-      pauseTaskId: taskId
+      pauseTaskId: taskId,
+      lastChallengeCheckAt: securityChallenge ? '' : health.lastChallengeCheckAt || '',
+      nextChallengeCheckAt: securityChallenge
+        ? new Date(now.getTime() + SECURITY_CHALLENGE_RECHECK_MINUTES * 60 * 1000).toISOString()
+        : health.nextChallengeCheckAt || ''
     };
     return {
       paused: !wasPaused || health.reasonCode !== incident.code,
@@ -1487,7 +1548,8 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       rewardCooldownDate: rewardRecovered ? '' : health.rewardCooldownDate || '',
       rewardCooldownCount: rewardRecovered ? 0 : Math.max(0, Number(health.rewardCooldownCount) || 0),
       pauseSource: '',
-      pauseTaskId: ''
+      pauseTaskId: '',
+      nextChallengeCheckAt: ''
     };
     return { recovered: true };
   }
@@ -1506,6 +1568,11 @@ export function isGlobalBlockingIncident(incident = {}) {
     'SECURITY_CHALLENGE_CLOUDFLARE',
     'CAPTCHA_REQUIRED'
   ]).has(code);
+}
+
+function isSecurityChallengeCode(value = '') {
+  return ['SECURITY_CHALLENGE', 'SECURITY_CHALLENGE_DATADOME', 'SECURITY_CHALLENGE_CLOUDFLARE', 'CAPTCHA_REQUIRED']
+    .includes(String(value || ''));
 }
 
 export function transientCrealityServiceFailure(error) {

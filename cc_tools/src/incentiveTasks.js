@@ -381,7 +381,7 @@ function classifyTrace({ relevant, relevantFailures, rejected, rateLimited, chal
     };
   }
   if (pageDiagnostic?.code === 'SECURITY_CHALLENGE' || challenge) {
-    const evidence = `${pageDiagnostic?.url || ''} ${(pageDiagnostic?.frameUrls || []).join(' ')} ${challenge?.url || ''}`;
+    const evidence = `${pageDiagnostic?.challengeProvider || ''} ${challenge?.challengeProvider || ''} ${pageDiagnostic?.url || ''} ${(pageDiagnostic?.frameUrls || []).join(' ')} ${challenge?.url || ''} ${challenge?.headers?.['cf-mitigated'] || ''}`;
     if (/datadome|captcha-delivery/i.test(evidence)) {
       return { code: 'SECURITY_CHALLENGE_DATADOME', message: 'DataDome solicitó una verificación de seguridad.', systemic: true };
     }
