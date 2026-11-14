@@ -67,6 +67,7 @@ import { normalizeShopGoal, readShopCatalog } from './shopGoal.js';
 import { readShopOrders } from './shopOrders.js';
 import { notifyShippedShopOrders } from './shopOrderNotifications.js';
 import { pauseForExpiredSession, resumeAfterAuthenticatedLogin } from './sessionHealth.js';
+import { attemptAutomaticSessionRecovery, sessionClosedNotification } from './sessionRecovery.js';
 import {
   archiveShopOrder,
   dismissShopOrder,
@@ -1289,10 +1290,13 @@ async function pauseForLoginAndNotify(taskId, error) {
   const config = await readConfig();
   const event = pauseForExpiredSession(config, taskId, error.diagnostic || error);
   await writeConfig(config);
-  if (event.notificationRequired && config.telegram.enabled) {
+  const recovery = event.notificationRequired
+    ? await attemptAutomaticSessionRecovery(config, { force: true })
+    : { recovered: false };
+  if (event.notificationRequired && !recovery.recovered && config.telegram.enabled) {
     await sendTelegram(
       config,
-      '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
+      sessionClosedNotification(recovery)
     ).catch((notificationError) => console.error('[telegram]', notificationError.message));
   }
 }

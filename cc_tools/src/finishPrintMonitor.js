@@ -5,6 +5,7 @@ import { appendRun, readConfig, readRuns, writeConfig } from './storage.js';
 import { sendTelegram } from './telegram.js';
 import { finishPrintProfileForPending, normalizeFinishPrintProfiles } from './finishPrintProfiles.js';
 import { pauseForExpiredSession } from './sessionHealth.js';
+import { attemptAutomaticSessionRecovery, sessionClosedNotification } from './sessionRecovery.js';
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const RETRY_INTERVAL_MS = 5 * 60 * 1000;
@@ -177,13 +178,18 @@ export async function checkPendingFinishPrint() {
         current.verificationError = 'LOGIN_REQUIRED';
       }
       await writeConfig(freshConfig);
-      if (sessionEvent.notificationRequired && freshConfig.telegram.enabled) {
+      const recovery = sessionEvent.notificationRequired
+        ? await attemptAutomaticSessionRecovery(freshConfig, { force: true })
+        : { recovered: false };
+      if (sessionEvent.notificationRequired && !recovery.recovered && freshConfig.telegram.enabled) {
         await sendTelegram(
           freshConfig,
-          '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
+          sessionClosedNotification(recovery)
         ).catch((notificationError) => console.error('[telegram]', notificationError.message));
       }
-      return { status: 'paused', error: 'LOGIN_REQUIRED' };
+      return recovery.recovered
+        ? { status: 'recovered', error: '' }
+        : { status: 'paused', error: 'LOGIN_REQUIRED' };
     }
     if (current?.printId === pending.printId) {
       if (error.code === 'FINISH_PRINT_RECORD_NOT_FOUND') {

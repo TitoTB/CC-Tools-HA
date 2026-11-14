@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.44
+
+- Limita los candidatos para boost a modelos realmente descargados, laminados o impresos, excluyendo los diseños que solo proceden del índice de autores favoritos.
+- Mantiene la preferencia por autores favoritos únicamente dentro de los modelos descargados aptos y rota los candidatos sin repetir los tres intentos anteriores.
+- Intenta restablecer inmediatamente cada nueva caducidad de sesión antes de enviar una alerta y evita que un intento reciente bloquee la recuperación de una incidencia nueva.
+- Informa del motivo real cuando el inicio de sesión automático no puede recuperar la cuenta recordada.
+
 ## 1.0.43
 
 - Recupera automáticamente una sesión cerrada seleccionando la cuenta recordada mediante el flujo OAuth nativo de Creality Cloud.

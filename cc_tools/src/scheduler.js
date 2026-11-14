@@ -26,13 +26,12 @@ import {
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
-import { abortAutomationBrowser, attemptRememberedSessionLogin, verifyPersistedSession } from './browserManager.js';
+import { abortAutomationBrowser, verifyPersistedSession } from './browserManager.js';
 import {
-  automaticLoginDue,
-  markAutomaticLoginAttempt,
   pauseForExpiredSession,
   resumeAfterAuthenticatedLogin
 } from './sessionHealth.js';
+import { attemptAutomaticSessionRecovery, sessionClosedNotification } from './sessionRecovery.js';
 
 const TASK_IDS = [
   'creality',
@@ -633,10 +632,13 @@ async function redeemScheduledShopGoal(config, now = new Date()) {
         screenshots: [],
         details: { failures: [{ title: goal.name, error: error.message, diagnostic }], diagnostics: [diagnostic] }
       });
-      if (event.notificationRequired && config.telegram.enabled) {
+      const recovery = event.notificationRequired
+        ? await attemptAutomaticSessionRecovery(config, { force: true })
+        : { recovered: false };
+      if (event.notificationRequired && !recovery.recovered && config.telegram.enabled) {
         await sendTelegram(
           config,
-          '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
+          sessionClosedNotification(recovery)
         ).catch((telegramError) => console.error('[telegram]', telegramError.message));
       }
       return true;
@@ -1166,13 +1168,17 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
   if (status === 'skipped') return;
 
   if (healthEvent.paused) {
-    if (healthEvent.incident?.code === 'LOGIN_REQUIRED' && config.telegram.enabled) {
-      await sendTelegram(
-        config,
-        '⚠️ CC Tools: Sesión de Creality Cloud cerrada\nLas automatizaciones se han pausado. Abre CC Tools e inicia sesión para reanudarlas.'
-      ).catch((error) => {
-        console.error('[telegram]', error.message);
-      });
+    if (healthEvent.incident?.code === 'LOGIN_REQUIRED') {
+      const recovery = await attemptAutomaticSessionRecovery(config, { force: true });
+      if (recovery.recovered) return;
+      if (config.telegram.enabled) {
+        await sendTelegram(
+          config,
+          sessionClosedNotification(recovery)
+        ).catch((error) => {
+          console.error('[telegram]', error.message);
+        });
+      }
     } else if (shouldNotifyIncident(config, taskId)) {
       const pauseUntil = formatPauseUntil(healthEvent.pausedUntil, config.tasks?.[taskId]?.timezone);
       const source = healthEvent.pauseSource === 'retry-after' ? ' (indicado por Creality Cloud)' : '';
@@ -1347,38 +1353,9 @@ async function holdForAutomationHealth(config) {
   const health = config.automationHealth || {};
   if (health.state !== 'paused') return false;
   if (health.reasonCode === 'LOGIN_REQUIRED') {
-    if (automaticLoginDue(config)) {
-      const attemptAt = new Date();
-      markAutomaticLoginAttempt(config, 'attempting', '', attemptAt);
-      await writeConfig(config);
-      try {
-        const automatic = await attemptRememberedSessionLogin({
-          expectedUserId: config.crealityProfile?.userId || ''
-        });
-        if (automatic.authenticated) {
-          markAutomaticLoginAttempt(config, 'success', 'Sesión recordada restablecida.', attemptAt);
-          resumeAfterAuthenticatedLogin(config, null, new Date(automatic.checkedAt || Date.now()));
-          await writeConfig(config);
-          return false;
-        }
-        markAutomaticLoginAttempt(
-          config,
-          automatic.reason === 'MANUAL_LOGIN_REQUIRED' ? 'manual_required' : 'skipped',
-          automatic.reason === 'MANUAL_LOGIN_REQUIRED'
-            ? automatic.message || 'Creality Cloud requiere completar el inicio de sesión manualmente.'
-            : 'El navegador está siendo utilizado por otra operación.',
-          attemptAt
-        );
-        await writeConfig(config);
-      } catch (error) {
-        markAutomaticLoginAttempt(config, 'error', error?.message || String(error), attemptAt);
-        await writeConfig(config);
-        if (!['BROWSER_BUSY', 'SESSION_CHECK_UNAVAILABLE', 'CREALITY_SERVICE_UNAVAILABLE'].includes(error?.code)) {
-          console.warn('[session] Falló el inicio de sesión automático:', error?.message || String(error));
-        }
-      }
-      return true;
-    }
+    const automatic = await attemptAutomaticSessionRecovery(config);
+    if (automatic.recovered) return false;
+    if (automatic.attempted) return true;
     try {
       const verification = await verifyPersistedSession();
       if (verification.authenticated) {

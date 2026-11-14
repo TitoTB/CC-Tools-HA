@@ -45,3 +45,17 @@ test('limita los reintentos automáticos y conserva la preferencia al cambiar de
   resumeAfterAuthenticatedLogin(config, null, now);
   assert.equal(config.crealitySession.autoLoginEnabled, true);
 });
+
+test('una nueva caducidad de sesión permite un intento inmediato aunque el anterior sea reciente', () => {
+  const config = {
+    automationHealth: { state: 'active' },
+    crealitySession: {
+      autoLoginEnabled: true,
+      autoLoginLastAttemptAt: '2026-10-15T08:20:00.000Z'
+    }
+  };
+
+  pauseForExpiredSession(config, 'modelDownloads', {}, new Date('2026-10-15T08:25:00.000Z'));
+
+  assert.equal(automaticLoginDue(config, new Date('2026-10-15T08:25:01.000Z')), true);
+});

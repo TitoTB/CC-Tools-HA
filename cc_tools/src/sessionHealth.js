@@ -54,6 +54,8 @@ export function automaticLoginDue(config = {}, now = new Date(), retryMs = 30 * 
   const session = config.crealitySession || {};
   if (session.autoLoginEnabled !== true) return false;
   const attemptedAt = Date.parse(session.autoLoginLastAttemptAt || '');
+  const pausedAt = Date.parse(config.automationHealth?.pausedAt || '');
+  if (Number.isFinite(pausedAt) && (!Number.isFinite(attemptedAt) || pausedAt > attemptedAt)) return true;
   return !Number.isFinite(attemptedAt) || now.getTime() - attemptedAt >= retryMs;
 }
 

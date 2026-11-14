@@ -22,11 +22,12 @@ test('reconoce botones para aplicar y repetir un boost sin confundir insignias',
 
 test('selecciona solo diseños favoritos activos en rondas del menos impulsado al más impulsado', () => {
   const candidates = selectBoostCandidates([
-    { id: 'regular', source: 'random', url: 'https://example.com/regular', downloadedAt: '2026-09-01T00:00:00Z', boostCount: 0 },
-    { id: 'new', favoriteActive: true, url: 'https://example.com/new', downloadedAt: '2026-09-03T00:00:00Z', boostCount: 0 },
-    { id: 'used', favoriteActive: true, url: 'https://example.com/used', downloadedAt: '2026-09-01T00:00:00Z', boostCount: 1 },
-    { id: 'old', favoriteActive: true, url: 'https://example.com/old', downloadedAt: '2026-09-02T00:00:00Z', boostCount: 0 },
-    { id: 'removed', favoriteActive: false, url: 'https://example.com/removed', boostCount: 0 }
+    { id: 'regular', source: 'random', indexedOnly: false, url: 'https://example.com/regular', downloadedAt: '2026-09-01T00:00:00Z', boostCount: 0 },
+    { id: 'new', favoriteActive: true, indexedOnly: false, url: 'https://example.com/new', downloadedAt: '2026-09-03T00:00:00Z', boostCount: 0 },
+    { id: 'used', favoriteActive: true, indexedOnly: false, url: 'https://example.com/used', downloadedAt: '2026-09-01T00:00:00Z', boostCount: 1 },
+    { id: 'old', favoriteActive: true, indexedOnly: false, url: 'https://example.com/old', downloadedAt: '2026-09-02T00:00:00Z', boostCount: 0 },
+    { id: 'removed', favoriteActive: false, indexedOnly: false, url: 'https://example.com/removed', boostCount: 0 },
+    { id: 'indexed', favoriteActive: true, indexedOnly: true, url: 'https://example.com/indexed', boostCount: 0 }
   ]);
 
   assert.deepEqual(candidates.map((design) => design.id), ['old', 'new', 'used']);
@@ -34,8 +35,8 @@ test('selecciona solo diseños favoritos activos en rondas del menos impulsado a
 
 test('excluye los diseños propios de los candidatos para boost', () => {
   const candidates = selectBoostCandidates([
-    { id: 'own', favoriteActive: true, url: 'https://example.test/own', ownerUserId: '42' },
-    { id: 'external', favoriteActive: true, url: 'https://example.test/external', ownerUserId: '84' }
+    { id: 'own', favoriteActive: true, indexedOnly: false, url: 'https://example.test/own', ownerUserId: '42' },
+    { id: 'external', favoriteActive: true, indexedOnly: false, url: 'https://example.test/external', ownerUserId: '84' }
   ], '42');
 
   assert.deepEqual(candidates.map((design) => design.id), ['external']);
@@ -44,11 +45,12 @@ test('excluye los diseños propios de los candidatos para boost', () => {
 test('incluye otros diseños descargados cuando se desactiva el modo solo favoritos', () => {
   const candidates = selectBoostCandidates([
     { id: 'favorite', favoriteActive: true, indexedOnly: true, url: 'https://example.test/favorite' },
+    { id: 'favorite-downloaded', favoriteActive: true, indexedOnly: false, url: 'https://example.test/favorite-downloaded' },
     { id: 'downloaded', indexedOnly: false, url: 'https://example.test/downloaded' },
     { id: 'indexed', indexedOnly: true, url: 'https://example.test/indexed' }
   ], '', false);
 
-  assert.deepEqual(candidates.map((design) => design.id), ['favorite', 'downloaded']);
+  assert.deepEqual(candidates.map((design) => design.id), ['favorite-downloaded', 'downloaded']);
 });
 
 test('considera utilizado el boost aunque falle la verificación posterior', () => {
@@ -70,7 +72,7 @@ test('limita el boost diario solo en ejecuciones programadas', () => {
 });
 
 test('limita los candidatos y rota después de un intento fallido', () => {
-  const designs = ['a', 'b', 'c', 'd'].map((id) => ({ id }));
+  const designs = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id }));
   const runs = [{
     taskId: 'modelBoosts',
     status: 'error',
@@ -80,7 +82,7 @@ test('limita los candidatos y rota después de un intento fallido', () => {
 
   assert.deepEqual(
     boostCandidatesForRun(designs, runs, 'Europe/Madrid', new Date('2026-10-18T10:00:00.000Z')).map((item) => item.id),
-    ['b', 'c', 'd']
+    ['d', 'e', 'f']
   );
 });
 

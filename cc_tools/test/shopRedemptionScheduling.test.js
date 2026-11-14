@@ -29,6 +29,8 @@ function harness(outcome, options = {}) {
     sendTelegram: async (_config, message) => { messages.push(message); },
     diagnoseTaskError: async (_error, _page, _context, detail) => detail,
     pauseForExpiredSession: () => ({ notificationRequired: true }),
+    attemptAutomaticSessionRecovery: async () => ({ attempted: true, recovered: false, reason: 'MANUAL_LOGIN_REQUIRED' }),
+    sessionClosedNotification: () => '⚠️ CC Tools: Sesión de Creality Cloud cerrada',
     redeemShopGoal: async () => {
       attempts += 1;
       assert.equal(writes[0].shopGoal.enabled, false);
