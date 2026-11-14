@@ -26,19 +26,24 @@ export async function readFavoriteProfileFromPage(page, value, { timeout = 45000
   const parsed = parseFavoriteProfileUrl(value);
   if (!parsed) throw favoriteError('FAVORITE_PROFILE_URL_INVALID', 'La URL no corresponde a un perfil de Creality Cloud.');
 
-  const nameNode = page.locator('.user-name .text-ellipsis').first();
-  const avatarNode = page.locator('.creality-user-avatar').first();
-  await nameNode.waitFor({ state: 'visible', timeout }).catch(() => {});
+  // Short names no longer carry text-ellipsis in Creality Cloud's profile card.
+  const nameNode = page.locator('.user-name > span, .user-name .text-ellipsis').first();
+  const avatarNode = page.locator('.user-avatar-box .creality-user-avatar').first();
+  const nameVisible = await nameNode.waitFor({ state: 'visible', timeout }).then(() => true, () => false);
+  if (!nameVisible) {
+    throw favoriteError('FAVORITE_PROFILE_NOT_FOUND', 'No se pudo encontrar ese perfil en Creality Cloud.');
+  }
 
   const name = String(await nameNode.getAttribute('title').catch(() => '')
     || await nameNode.textContent().catch(() => '')
     || '').trim();
-  const avatarStyle = String(await avatarNode.getAttribute('style').catch(() => '') || '');
+  const avatarStyle = await avatarNode.count()
+    ? String(await avatarNode.getAttribute('style').catch(() => '') || '') : '';
   const avatarUrl = normalizeFavoriteAvatarUrl(extractBackgroundUrl(avatarStyle));
-  const visibleId = String(await page.locator('.user-id').first().textContent().catch(() => '') || '');
+  const visibleId = String(await page.locator('.user-id').first().textContent({ timeout }).catch(() => '') || '');
   const visibleIdMatch = visibleId.match(/ID\s*:\s*(\d+)/i);
 
-  if (!name || (visibleIdMatch && visibleIdMatch[1] !== parsed.userId)) {
+  if (!name || visibleIdMatch?.[1] !== parsed.userId) {
     throw favoriteError('FAVORITE_PROFILE_NOT_FOUND', 'No se pudo encontrar ese perfil en Creality Cloud.');
   }
 
