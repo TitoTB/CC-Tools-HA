@@ -26,7 +26,7 @@ import {
   shopOrdersRefreshDue,
   shippedShopOrderTransitions
 } from './shopOrdersState.js';
-import { abortAutomationBrowser, browserManagerState, verifyPersistedSession } from './browserManager.js';
+import { abortAutomationBrowser, browserManagerState, verifyPersistedChallenge, verifyPersistedSession } from './browserManager.js';
 import {
   pauseForExpiredSession,
   resumeAfterAuthenticatedLogin
@@ -143,7 +143,16 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
     freshConfig.tasks[taskId].lastRunAt = new Date().toISOString();
     freshConfig.tasks[taskId].lastStatus = status;
     freshConfig.tasks[taskId].lastMessage = message;
-    updateNextRunAfterExecution(freshConfig.tasks[taskId], taskId, source, result);
+    const securityChallenge = shouldPreserveScheduledSlot(result);
+    if (source === 'schedule' && securityChallenge) {
+      delayPendingTaskPlan(
+        freshConfig.tasks[taskId],
+        taskId,
+        new Date(Date.now() + SECURITY_CHALLENGE_RECHECK_MINUTES * 60 * 1000)
+      );
+    } else {
+      updateNextRunAfterExecution(freshConfig.tasks[taskId], taskId, source, result);
+    }
     updateDependentModelActions(freshConfig, taskId, result);
     updatePointsCounter(freshConfig, result);
     const healthEvent = updateAutomationHealth(freshConfig, taskId, status, result);
@@ -263,6 +272,12 @@ export async function runTaskNow(taskId, source = 'manual', options = {}) {
         syncActiveFinishPrintProfile(freshConfig.tasks.finishPrint);
         activateNextFinishPrintProfile(freshConfig.tasks.finishPrint);
       }
+    } else if (source === 'schedule' && shouldPreserveScheduledSlot({ details })) {
+      delayPendingTaskPlan(
+        freshConfig.tasks[taskId],
+        taskId,
+        new Date(Date.now() + SECURITY_CHALLENGE_RECHECK_MINUTES * 60 * 1000)
+      );
     } else {
       updateNextRunAfterExecution(freshConfig.tasks[taskId], taskId, source, failedResult);
     }
@@ -708,6 +723,10 @@ export function updateNextRunAfterExecution(taskConfig, taskId, source, result, 
   }
 
   taskConfig.nextRunAt = scheduleNextRun(taskConfig, now, { forceNextWindow: true });
+}
+
+export function shouldPreserveScheduledSlot(result = {}) {
+  return isSecurityChallengeCode(result.details?.incident?.code);
 }
 
 function ensureDownloadPlan(taskConfig, runs = [], now = new Date()) {
@@ -1180,6 +1199,13 @@ async function notifyTaskResult(config, taskId, status, result, healthEvent = {}
           console.error('[telegram]', error.message);
         });
       }
+    } else if (isSecurityChallengeCode(healthEvent.incident?.code) && shouldNotifyIncident(config, taskId)) {
+      await sendTelegram(
+        config,
+        '⚠️ CC Tools: Cloudflare requiere una verificación\n'
+        + 'CC Tools ha esperado a que el navegador la complete automáticamente y volverá a comprobarla cada 5 minutos. '
+        + 'Si persiste, abre el navegador remoto y completa la verificación manualmente.'
+      ).catch((error) => console.error('[telegram]', error.message));
     } else if (shouldNotifyIncident(config, taskId)) {
       const pauseUntil = formatPauseUntil(healthEvent.pausedUntil, config.tasks?.[taskId]?.timezone);
       const source = healthEvent.pauseSource === 'retry-after' ? ' (indicado por Creality Cloud)' : '';
@@ -1377,7 +1403,7 @@ async function holdForAutomationHealth(config) {
 
     const checkedAt = new Date();
     try {
-      const verification = await verifyPersistedSession();
+      const verification = await verifyPersistedChallenge(health.challengeUrl || '');
       if (verification.authenticated) {
         config.crealitySession = {
           ...(config.crealitySession || {}),
@@ -1395,10 +1421,17 @@ async function holdForAutomationHealth(config) {
           lastRecoveredAt: checkedAt.toISOString(),
           pauseSource: '',
           pauseTaskId: '',
+          challengeUrl: '',
           lastChallengeCheckAt: checkedAt.toISOString(),
           nextChallengeCheckAt: ''
         };
         await writeConfig(config);
+        if (config.telegram?.enabled) {
+          await sendTelegram(
+            config,
+            '✅ CC Tools: Verificación de Cloudflare completada. Las automatizaciones se han reanudado.'
+          ).catch((error) => console.error('[telegram]', error.message));
+        }
         return false;
       }
     } catch (error) {
@@ -1433,6 +1466,7 @@ async function holdForAutomationHealth(config) {
       pausedUntil: '',
       pauseSource: '',
       pauseTaskId: '',
+      challengeUrl: '',
       nextChallengeCheckAt: ''
     };
     await writeConfig(config);
@@ -1448,6 +1482,7 @@ async function holdForAutomationHealth(config) {
       pausedUntil: '',
       pauseSource: '',
       pauseTaskId: '',
+      challengeUrl: '',
       nextChallengeCheckAt: ''
     };
     await writeConfig(config);
@@ -1509,6 +1544,7 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       rewardCooldownCount,
       pauseSource: loginRequired ? 'session' : pauseSource,
       pauseTaskId: taskId,
+      challengeUrl: securityChallenge ? String(incident.url || health.challengeUrl || '') : health.challengeUrl || '',
       lastChallengeCheckAt: securityChallenge ? '' : health.lastChallengeCheckAt || '',
       nextChallengeCheckAt: securityChallenge
         ? new Date(now.getTime() + SECURITY_CHALLENGE_RECHECK_MINUTES * 60 * 1000).toISOString()
@@ -1549,6 +1585,7 @@ export function updateAutomationHealth(config, taskId, status, result = {}) {
       rewardCooldownCount: rewardRecovered ? 0 : Math.max(0, Number(health.rewardCooldownCount) || 0),
       pauseSource: '',
       pauseTaskId: '',
+      challengeUrl: '',
       nextChallengeCheckAt: ''
     };
     return { recovered: true };

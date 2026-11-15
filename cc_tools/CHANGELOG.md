@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.47
+
+- Distingue correctamente una verificación de Cloudflare de un límite de peticiones cuando Creality Cloud responde con HTTP 429 y `cf-mitigated: challenge`.
+- Espera hasta 60 segundos en la misma pestaña y sesión para que una verificación pasiva pueda completarse, conserva las cookies y reintenta una vez la página original.
+- Revalida cada cinco minutos la URL afectada y reanuda automáticamente las tareas cuando la verificación queda resuelta.
+- Conserva pendiente la tarea programada durante la verificación y solicita abrir el navegador remoto si Cloudflare requiere interacción manual.
+
 ## 1.0.46
 
 - Reconoce la estructura HTML actual y la anterior de los perfiles favoritos de Creality Cloud.

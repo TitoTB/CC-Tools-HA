@@ -14,6 +14,7 @@ const SECURITY_SELECTORS = [
   'iframe[src*="/captcha"]',
   '[class*="captcha"]'
 ];
+const DEFAULT_CHALLENGE_TIMEOUT_MS = 60_000;
 
 export function observeCrealityPage(page, taskId) {
   const pending = [];
@@ -71,6 +72,13 @@ export function observeCrealityPage(page, taskId) {
       await Promise.allSettled(pending);
       return responses.slice(-20);
     },
+    async reset() {
+      await Promise.allSettled(pending);
+      responses.length = 0;
+      failedRequests.length = 0;
+      pending.length = 0;
+      return { sequence };
+    },
     stop() {
       page.off('request', requestListener);
       page.off('response', responseListener);
@@ -97,14 +105,6 @@ export async function inspectCrealityPage(page, observer, options = {}) {
     });
   const modelReviewFailure = responses.find(isModelReviewFailureResponse);
 
-  if (rateLimit) {
-    return diagnostic('RATE_LIMITED', 'rate_limit', true,
-      'Creality Cloud ha limitado temporalmente las solicitudes.', {
-        url, title, responses, frameUrls,
-        retryAfter: rateLimit.headers?.['retry-after'] || ''
-      });
-  }
-
   if (challengeResponse || securityLocation || visibleSecurityChallenge || hasStandaloneSecurityText(title, bodyText)) {
     return diagnostic('SECURITY_CHALLENGE', 'security', true,
       'Creality Cloud ha mostrado una verificación de seguridad.', {
@@ -113,6 +113,14 @@ export async function inspectCrealityPage(page, observer, options = {}) {
         responses,
         frameUrls,
         challengeProvider
+      });
+  }
+
+  if (rateLimit) {
+    return diagnostic('RATE_LIMITED', 'rate_limit', true,
+      'Creality Cloud ha limitado temporalmente las solicitudes.', {
+        url, title, responses, frameUrls,
+        retryAfter: rateLimit.headers?.['retry-after'] || ''
       });
   }
 
@@ -151,6 +159,74 @@ export async function inspectCrealityPage(page, observer, options = {}) {
   }
 
   return null;
+}
+
+export async function inspectCrealityPageWithChallengeRecovery(page, observer, options = {}) {
+  const initial = await inspectCrealityPage(page, observer, options);
+  if (!isSecurityChallengeDiagnostic(initial)) return initial;
+  const recovery = await waitForSecurityChallengeResolution(page, observer, {
+    targetUrl: options.challengeTargetUrl || page?.url?.() || '',
+    timeout: options.challengeTimeout,
+    settleMs: options.challengeSettleMs,
+    requireBody: options.requireBody
+  });
+  return recovery.diagnostic;
+}
+
+export async function waitForSecurityChallengeResolution(page, observer, options = {}) {
+  const timeout = Math.max(1_000, Number(options.timeout) || DEFAULT_CHALLENGE_TIMEOUT_MS);
+  const settleMs = Math.max(250, Number(options.settleMs) || 1_500);
+  const targetUrl = String(options.targetUrl || page?.url?.() || '');
+  const startedAt = Date.now();
+  let lastDiagnostic = await inspectCrealityPage(page, observer, { requireBody: options.requireBody });
+
+  while (Date.now() - startedAt < timeout) {
+    if (!(await hasActiveSecurityChallenge(page))) {
+      await observer?.reset?.();
+      if (targetUrl && !samePageTarget(page?.url?.(), targetUrl)) {
+        await page.goto(targetUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: Math.min(45_000, Math.max(5_000, timeout - (Date.now() - startedAt)))
+        }).catch(() => {});
+      }
+      await page.waitForTimeout(settleMs).catch(() => {});
+      lastDiagnostic = await inspectCrealityPage(page, observer, { requireBody: options.requireBody });
+      if (!lastDiagnostic) {
+        return {
+          resolved: true,
+          waitedMs: Date.now() - startedAt,
+          url: page?.url?.() || targetUrl,
+          diagnostic: null
+        };
+      }
+      if (!isSecurityChallengeDiagnostic(lastDiagnostic)) {
+        return {
+          resolved: false,
+          waitedMs: Date.now() - startedAt,
+          url: page?.url?.() || targetUrl,
+          diagnostic: lastDiagnostic
+        };
+      }
+    }
+    await page.waitForTimeout(1_000).catch(() => {});
+  }
+
+  return {
+    resolved: false,
+    waitedMs: Date.now() - startedAt,
+    url: page?.url?.() || targetUrl,
+    diagnostic: {
+      ...(lastDiagnostic || diagnostic(
+        'SECURITY_CHALLENGE',
+        'security',
+        true,
+        'Creality Cloud ha mostrado una verificación de seguridad.',
+        { url: page?.url?.() || targetUrl }
+      )),
+      challengeWaitMs: Date.now() - startedAt,
+      challengeResolution: 'manual_required'
+    }
+  };
 }
 
 function hasStandaloneSecurityText(title, bodyText) {
@@ -400,6 +476,35 @@ async function hasVisibleSecurityChallenge(page) {
     if (await page.locator(selector).first().isVisible().catch(() => false)) return true;
   }
   return false;
+}
+
+async function hasActiveSecurityChallenge(page) {
+  if (!page || page.isClosed?.()) return false;
+  const url = page.url?.() || '';
+  const frameUrls = page.frames?.().map((frame) => frame.url()).filter(Boolean) || [];
+  if (SECURITY_URL_RE.test(url) || frameUrls.some((frameUrl) => ACTIVE_SECURITY_FRAME_RE.test(frameUrl))) return true;
+  if (await hasVisibleSecurityChallenge(page)) return true;
+  const title = await page.title?.().catch(() => '') || '';
+  const bodyText = normalize(await page.locator?.('body')?.innerText({ timeout: 750 }).catch(() => '') || '');
+  return hasStandaloneSecurityText(title, bodyText);
+}
+
+function isSecurityChallengeDiagnostic(value) {
+  return ['SECURITY_CHALLENGE', 'SECURITY_CHALLENGE_DATADOME', 'SECURITY_CHALLENGE_CLOUDFLARE', 'CAPTCHA_REQUIRED']
+    .includes(String(value?.code || ''));
+}
+
+function samePageTarget(currentValue, targetValue) {
+  try {
+    const current = new URL(currentValue);
+    const target = new URL(targetValue);
+    return current.origin === target.origin
+      && current.pathname.replace(/\/+$/, '') === target.pathname.replace(/\/+$/, '')
+      && Array.from(target.searchParams.entries())
+        .every(([name, value]) => current.searchParams.get(name) === value);
+  } catch {
+    return String(currentValue || '') === String(targetValue || '');
+  }
 }
 
 async function loginRequired(page) {

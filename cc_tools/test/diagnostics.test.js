@@ -4,6 +4,7 @@ import { normalizeBrowserError, sessionCheckUnavailableError } from '../src/brow
 import {
   generalizedIncident,
   inspectCrealityPage,
+  inspectCrealityPageWithChallengeRecovery,
   isCrealityLoginUrl,
   isModelReviewFailureResponse,
   isSecurityChallengeResponse,
@@ -225,6 +226,77 @@ test('un desafío API de Cloudflare prevalece sobre una página visible aparente
   const result = await inspectCrealityPage(page, observer, { requireBody: true });
   assert.equal(result.code, 'SECURITY_CHALLENGE');
   assert.equal(result.challengeProvider, 'cloudflare');
+});
+
+test('un HTTP 429 con cf-mitigated se clasifica como challenge y no como límite genérico', async () => {
+  const url = 'https://www.crealitycloud.com/es/model-detail/modelo-de-prueba';
+  const page = fakePage({
+    url,
+    title: 'Just a moment...',
+    body: 'Performing security verification'
+  });
+  const observer = {
+    snapshot: async () => [{
+      status: 429,
+      url,
+      resourceType: 'document',
+      headers: { 'cf-mitigated': 'challenge', 'content-type': 'text/html' },
+      challenge: true,
+      challengeProvider: 'cloudflare'
+    }]
+  };
+
+  const result = await inspectCrealityPage(page, observer, { requireBody: true });
+  assert.equal(result.code, 'SECURITY_CHALLENGE');
+  assert.equal(result.challengeProvider, 'cloudflare');
+});
+
+test('espera a que un challenge pasivo termine y reutiliza la misma página', async () => {
+  const url = 'https://www.crealitycloud.com/es/model-detail/modelo-de-prueba';
+  let challenged = true;
+  let reset = false;
+  const page = {
+    url: () => url,
+    isClosed: () => false,
+    title: async () => challenged ? 'Just a moment...' : 'Modelo de prueba | Creality Cloud',
+    frames: () => [{ url: () => url }],
+    waitForTimeout: async () => { challenged = false; },
+    goto: async () => {},
+    locator: (selector) => {
+      if (selector === 'body') {
+        return {
+          innerText: async () => challenged
+            ? 'Performing security verification'
+            : 'Modelo de prueba listo para imprimir. Ver archivos STL/CAD y añadir a la colección.'
+        };
+      }
+      return {
+        first: () => ({ isVisible: async () => false }),
+        count: async () => 0,
+        nth: () => ({ isVisible: async () => false })
+      };
+    }
+  };
+  const observer = {
+    snapshot: async () => reset ? [] : [{
+      status: 429,
+      url,
+      resourceType: 'document',
+      headers: { 'cf-mitigated': 'challenge' },
+      challenge: true,
+      challengeProvider: 'cloudflare'
+    }],
+    reset: async () => { reset = true; }
+  };
+
+  const result = await inspectCrealityPageWithChallengeRecovery(page, observer, {
+    requireBody: true,
+    challengeTargetUrl: url,
+    challengeTimeout: 2_000,
+    challengeSettleMs: 1
+  });
+  assert.equal(result, null);
+  assert.equal(reset, true);
 });
 
 test('una ficha normal no falla aunque el observador haya visto el script de Cloudflare', async () => {

@@ -11,6 +11,7 @@ import {
   isGlobalBlockingIncident,
   recordCrealityServiceFailure,
   serviceFailureLogDetails,
+  shouldPreserveScheduledSlot,
   transientCrealityServiceFailure,
   updateAutomationHealth,
   updateModelBoostState,
@@ -148,7 +149,8 @@ test('un desafío de Cloudflare programa una comprobación temprana de recuperac
       incident: {
         code: 'SECURITY_CHALLENGE_CLOUDFLARE',
         message: 'Cloudflare solicitó una verificación de seguridad.',
-        systemic: true
+        systemic: true,
+        url: 'https://www.crealitycloud.com/es/model-detail/modelo-de-prueba'
       }
     }
   });
@@ -158,6 +160,13 @@ test('un desafío de Cloudflare programa una comprobación temprana de recuperac
   assert.equal(config.automationHealth.state, 'paused');
   assert.ok(nextCheckAt >= before + 4 * 60 * 1000);
   assert.ok(nextCheckAt <= before + 6 * 60 * 1000);
+  assert.equal(config.automationHealth.challengeUrl, 'https://www.crealitycloud.com/es/model-detail/modelo-de-prueba');
+  assert.equal(shouldPreserveScheduledSlot({
+    details: { incident: { code: 'SECURITY_CHALLENGE_CLOUDFLARE' } }
+  }), true);
+  assert.equal(shouldPreserveScheduledSlot({
+    details: { incident: { code: 'RATE_LIMITED' } }
+  }), false);
 });
 
 test('clasifica timeouts de navegación y errores 502 a 504 como indisponibilidad temporal', () => {

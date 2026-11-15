@@ -23,6 +23,7 @@ import {
   failureFromDiagnostic,
   generalizedIncident,
   inspectCrealityPage,
+  inspectCrealityPageWithChallengeRecovery,
   observeCrealityPage,
   normalizeCaughtError,
   saveDiagnosticImage
@@ -426,7 +427,10 @@ async function openCatalogCategory(page, observer, categoryName = '') {
   await page.goto(CATALOG_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3500);
 
-  const diagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
+  const diagnostic = await inspectCrealityPageWithChallengeRecovery(page, observer, {
+    requireBody: true,
+    challengeTargetUrl: CATALOG_URL
+  });
   if (diagnostic) {
     const screenshot = await captureDiagnosticScreenshot(page, 'model-catalog', diagnostic.code);
     throw diagnosticError(diagnostic, screenshot);
@@ -553,7 +557,10 @@ async function downloadModel(page, candidate, batchDir, observer, ownUserId = ''
   await navigateToCrealityPage(page, candidate.url);
   await page.waitForTimeout(3500);
 
-  const diagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
+  const diagnostic = await inspectCrealityPageWithChallengeRecovery(page, observer, {
+    requireBody: true,
+    challengeTargetUrl: candidate.url
+  });
   if (diagnostic) throw diagnosticError(diagnostic);
 
   const title = await getModelTitle(page, candidate);

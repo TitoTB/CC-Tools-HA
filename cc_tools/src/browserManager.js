@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
 import { browserSessionDir } from './storage.js';
-import { inspectCrealityPage, normalizeCaughtError, observeCrealityPage } from './crealityDiagnostics.js';
+import { inspectCrealityPage, inspectCrealityPageWithChallengeRecovery, normalizeCaughtError, observeCrealityPage } from './crealityDiagnostics.js';
 import { isNavigationTimeout, navigateToCrealityPage } from './crealityNavigation.js';
 import { confirmAuthenticatedSession } from './sessionMonitor.js';
 
@@ -151,6 +151,34 @@ export async function verifyPersistedSession() {
     session = { authenticated: true };
   });
   return { checked: true, ...(session || {}), authenticated: true };
+}
+
+export async function verifyPersistedChallenge(challengeUrl = '') {
+  const targetUrl = isCrealityApplicationPage(challengeUrl) ? challengeUrl : SESSION_CHECK_URL;
+  let result = null;
+  await withAutomationBrowser({}, async (context) => {
+    const page = context.pages()[0] || await context.newPage();
+    const observer = observeCrealityPage(page, 'challenge-recheck');
+    try {
+      await navigateToCrealityPage(page, targetUrl, { timeout: 45_000, attempts: 1 });
+      await page.waitForTimeout(2_000);
+      const diagnostic = await inspectCrealityPageWithChallengeRecovery(page, observer, {
+        requireBody: true,
+        challengeTargetUrl: targetUrl,
+        challengeTimeout: 60_000
+      });
+      if (diagnostic) throw diagnosticBrowserError(diagnostic);
+      result = {
+        checked: true,
+        authenticated: true,
+        checkedAt: new Date().toISOString(),
+        url: page.url()
+      };
+    } finally {
+      observer.stop();
+    }
+  });
+  return result || { checked: false, authenticated: false, reason: 'CHALLENGE_CHECK_INCONCLUSIVE' };
 }
 
 export async function attemptRememberedSessionLogin(options = {}) {
@@ -462,7 +490,10 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
     });
     await page.waitForTimeout(750);
     const profileResponse = await profileResponsePromise;
-    const diagnostic = await inspectCrealityPage(page, observer);
+    const diagnostic = await inspectCrealityPageWithChallengeRecovery(page, observer, {
+      challengeTargetUrl: SESSION_CHECK_URL,
+      challengeTimeout: 60_000
+    });
     if (diagnostic && ['LOGIN_REQUIRED', 'SECURITY_CHALLENGE'].includes(diagnostic.code)) {
       const error = new Error(diagnostic.message);
       error.code = diagnostic.code;
@@ -511,6 +542,15 @@ async function assertAuthenticatedSession(context, preferredPage = null) {
   } finally {
     observer.stop();
   }
+}
+
+function diagnosticBrowserError(diagnostic) {
+  const error = new Error(diagnostic.message || 'Creality Cloud devolvió un diagnóstico de navegación.');
+  error.code = diagnostic.code || 'CREALITY_PAGE_ERROR';
+  error.category = diagnostic.category || 'page';
+  error.systemic = Boolean(diagnostic.systemic);
+  error.diagnostic = diagnostic;
+  return error;
 }
 
 export function sessionCheckOutcome(profileState = 'unknown') {

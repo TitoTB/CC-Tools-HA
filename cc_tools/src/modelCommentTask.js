@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { withAutomationBrowser } from './browserManager.js';
-import { captureDiagnosticScreenshot, diagnoseTaskError, failureFromDiagnostic, inspectCrealityPage, observeCrealityPage } from './crealityDiagnostics.js';
+import { captureDiagnosticScreenshot, diagnoseTaskError, failureFromDiagnostic, inspectCrealityPageWithChallengeRecovery, observeCrealityPage } from './crealityDiagnostics.js';
 import { compareIncentiveProgress, readIncentiveProgress, waitForIncentiveProgress } from './incentiveTasks.js';
 import { commentImagesDir, markDesignCommentUnavailable, markDesignCommented, readDesigns, readRuns, updateDesignOwnership } from './storage.js';
 import { isOwnModel, readModelOwnership } from './modelOwnership.js';
@@ -54,7 +54,10 @@ export async function runModelComment(taskConfig = {}, options = {}) {
         const commentFeedResponse = waitForCommentFeed(page);
         await page.goto(candidate.url, { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(3500);
-        const pageDiagnostic = await inspectCrealityPage(page, observer, { requireBody: true });
+        const pageDiagnostic = await inspectCrealityPageWithChallengeRecovery(page, observer, {
+          requireBody: true,
+          challengeTargetUrl: candidate.url
+        });
         if (pageDiagnostic?.code === 'MODEL_NOT_FOUND') {
           await markDesignCommentUnavailable(candidate.id);
           continue;
