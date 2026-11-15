@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { chromium } from 'playwright';
+import { launchExternalChromium } from './externalChromium.js';
+import { installCookieConsentHandling } from './cookieConsent.js';
 import { browserSessionDir } from './storage.js';
 import { inspectCrealityPage, inspectCrealityPageWithChallengeRecovery, normalizeCaughtError, observeCrealityPage } from './crealityDiagnostics.js';
 import { isNavigationTimeout, navigateToCrealityPage } from './crealityNavigation.js';
@@ -12,6 +14,7 @@ const SESSION_PROFILE_API_PATH = '/api/cxy/v3/user/getInfo';
 let activeContext = null;
 let activeMode = '';
 let activeBrowserVersion = '';
+let closingContext = null;
 
 export async function withAutomationBrowser(options, callback) {
   if (activeMode === 'interactive') {
@@ -28,8 +31,7 @@ export async function withAutomationBrowser(options, callback) {
   activeMode = 'automation';
   try {
     activeContext = await launchWithRecovery(
-      { ...baseOptions(), ...(options || {}) },
-      { allowHeadlessFallback: true }
+      { ...baseOptions(), ...(options || {}) }
     );
     activeBrowserVersion = activeContext.browser()?.version() || '';
     watchContext(activeContext);
@@ -56,6 +58,7 @@ export async function withIsolatedBrowser(options, callback) {
     ...(options || {})
   });
   try {
+    await installCookieConsentHandling(context);
     return await callback(context);
   } finally {
     await context.close().catch(() => {});
@@ -84,8 +87,7 @@ export async function restartAutomationBrowser(options = {}) {
   activeMode = 'automation';
   try {
     activeContext = await launchWithRecovery(
-      { ...baseOptions(), ...options },
-      { allowHeadlessFallback: true }
+      { ...baseOptions(), ...options }
     );
     activeBrowserVersion = activeContext.browser()?.version() || '';
     watchContext(activeContext);
@@ -97,8 +99,8 @@ export async function restartAutomationBrowser(options = {}) {
 }
 
 export async function openInteractiveBrowser(url) {
-  if (activeMode === 'automation') {
-    throw browserError('BROWSER_BUSY', 'Hay una automatización en curso. Inténtalo de nuevo cuando termine.', false);
+  if (activeMode && activeMode !== 'interactive') {
+    throw browserError('BROWSER_BUSY', 'Hay otra operación utilizando el navegador. Inténtalo de nuevo cuando termine.', false);
   }
 
   if (!activeContext) {
@@ -194,8 +196,7 @@ export async function attemptRememberedSessionLogin(options = {}) {
   activeMode = 'automation';
   try {
     activeContext = await launchWithRecovery(
-      { ...baseOptions(), headless: true },
-      { allowHeadlessFallback: true }
+      { ...baseOptions(), headless: false }
     );
     activeBrowserVersion = activeContext.browser()?.version() || '';
     watchContext(activeContext);
@@ -355,7 +356,7 @@ function crealityServiceUnavailableError(error) {
   return normalized;
 }
 
-async function launchWithRecovery(options, behavior = {}) {
+async function launchWithRecovery(options) {
   const preflightRecovery = await recoverBrowserProfile();
   if (!preflightRecovery.recovered) {
     const error = browserError(
@@ -369,31 +370,9 @@ async function launchWithRecovery(options, behavior = {}) {
   }
 
   try {
-    return await chromium.launchPersistentContext(chromiumSessionDir(), options);
+    return await launchExternalChromium(chromiumSessionDir(), options);
   } catch (error) {
-    if (behavior.allowHeadlessFallback && isDisplayError(error)) {
-      await recoverBrowserProfile();
-      try {
-        return await chromium.launchPersistentContext(chromiumSessionDir(), {
-          ...options,
-          headless: true
-        });
-      } catch (headlessError) {
-        throw normalizeBrowserError(headlessError);
-      }
-    }
-    if (!isProfileLockError(error)) throw normalizeBrowserError(error);
-
-    const recovery = await recoverBrowserProfile();
-    if (!recovery.recovered) throw normalizeBrowserError(error);
-
-    try {
-      return await chromium.launchPersistentContext(chromiumSessionDir(), options);
-    } catch (retryError) {
-      const normalized = normalizeBrowserError(retryError);
-      normalized.recovery = recovery;
-      throw normalized;
-    }
+    throw normalizeBrowserError(error);
   }
 }
 
@@ -469,11 +448,18 @@ function isProcessAlive(pid) {
 }
 
 async function closeActiveContext() {
+  if (closingContext) return closingContext;
   const context = activeContext;
+  if (!context) { activeMode = ''; activeBrowserVersion = ''; return; }
   activeContext = null;
-  activeMode = '';
+  activeMode = 'closing';
   activeBrowserVersion = '';
-  if (context) await context.close().catch(() => {});
+  // Do not let another task recover or open this profile until Chromium exits.
+  closingContext = Promise.resolve().then(() => context.close()).catch(() => {}).finally(() => {
+    closingContext = null;
+    activeMode = '';
+  });
+  return closingContext;
 }
 
 async function assertAuthenticatedSession(context, preferredPage = null) {

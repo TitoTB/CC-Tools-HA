@@ -30,6 +30,10 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run tests
         run: npm test
+      - name: Test external Chromium and persistent profile
+        run: xvfb-run -a node --test scripts/externalChromium.browser.mjs
+      - name: Test optional cookie rejection and profile persistence
+        run: xvfb-run -a node --test scripts/cookieConsent.browser.mjs
 
   build:
     runs-on: ubuntu-latest
