@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.48
+
+- Ejecuta Chromium como proceso visible independiente y conecta Playwright mediante CDP, conservando el perfil persistente entre tareas y accesos manuales.
+- Cierra de forma coordinada Chromium antes de reutilizar el perfil y evita bloqueos provocados por procesos o cierres solapados.
+- Rechaza automáticamente las cookies opcionales desde el control oficial de Creality Cloud sin alterar las cookies necesarias ni las verificaciones de seguridad.
+- Mantiene la espera pasiva, la revalidación periódica y la intervención manual para verificaciones de Cloudflare incorporadas en 1.0.47.
+
 ## 1.0.47
 
 - Distingue correctamente una verificación de Cloudflare de un límite de peticiones cuando Creality Cloud responde con HTTP 429 y `cf-mitigated: challenge`.
